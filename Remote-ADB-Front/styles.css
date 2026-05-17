@@ -610,3 +610,57 @@ button:disabled {
     border-radius: 9999px;
     letter-spacing: 0.04em;
 }
+
+/* ── Secure Tunnel ───────────────────────────────────────────────────────────────────── */
+
+.tunnel-select {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-size: 0.9rem;
+}
+
+.tunnel-auth-warning {
+    margin-top: 12px;
+    color: #7c2d12;
+    background: rgba(254, 202, 202, 0.12);
+    border-color: #f87171;
+}
+
+.tunnel-url-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 14px 0 0;
+}
+
+.tunnel-url-input {
+    flex: 1;
+    font-family: "Fira Code", "Cascadia Code", monospace;
+    font-size: 0.82rem;
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+    background: var(--input-bg);
+}
+
+.tunnel-qr-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 16px;
+    padding: 16px;
+    background: #ffffff;
+    border-radius: 12px;
+    max-width: 280px;
+}
+
+.tunnel-qr {
+    width: 200px;
+    height: 200px;
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}

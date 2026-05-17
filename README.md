@@ -144,6 +144,17 @@ The `Remote-ADB-App` APK can be installed on an Android device to provide a nati
 
 ## 📋 Changelog
 
+### v1.2.0
+- **Added** Secure Tunnel feature — expose the backend over the internet from any network, no port forwarding needed
+  - **Cloudflare Quick Tunnels** (default): free, no account required; `cloudflared` binary auto-downloaded to `~/.remoteadb/bin/` on first use; tunnel URL is a `*.trycloudflare.com` HTTPS endpoint
+  - **ngrok** support: provide an auth token via the UI or `NGROK_AUTHTOKEN` env var
+  - QR code generated server-side (PNG `data:` URL via `qrcode` package) — scan with Android camera to open the UI on any device, anywhere
+  - Copy-to-clipboard button for the tunnel URL
+  - Auth warning banner when `AUTH_SECRET` is not set and a tunnel is active
+  - Tunnel lifecycle fully managed via 3 new API routes: `GET /api/tunnel/status`, `POST /api/tunnel/start`, `POST /api/tunnel/stop`
+- **Added** Linux/macOS installer (`Remote-ADB-Back/src/install.sh`) with systemd (Linux) and launchd (macOS) auto-start support
+- **Bumped** Android versionCode 2 → 3, versionName 1.1.0 → 1.2.0
+
 ### v1.1.0
 - **Fixed** critical crash on page load — `tapBtn`/`swipeBtn` null references halted all JS initialization
 - **Fixed** device list never auto-refreshing — `pollDevices()` now runs every 5 seconds

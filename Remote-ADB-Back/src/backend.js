@@ -14,6 +14,8 @@ const {
   applyUpdate,
   getCurrentVersion,
 } = require("./updater");
+const tunnel = require("./tunnel");
+const QRCode = require("qrcode");
 const app = express();
 app.disable("x-powered-by");
 const port = process.env.PORT || 5200;
@@ -755,6 +757,68 @@ app.post("/api/update-apply", async (req, res) => {
       console.error("[updater] Apply failed:", err.message),
     ),
   );
+});
+
+// ─── Tunnel Management ────────────────────────────────────────────────────────
+
+app.get("/api/tunnel/status", async (req, res) => {
+  const s = tunnel.status();
+  let qrDataUrl = null;
+  if (s.url) {
+    try {
+      qrDataUrl = await QRCode.toDataURL(s.url, {
+        width: 240,
+        margin: 2,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+    } catch (e) {
+      console.warn("[tunnel] QR code generation failed:", e.message);
+    }
+  }
+  res.json({
+    ...s,
+    qrDataUrl,
+    authSet: !!authSecret,
+    authWarning: s.active && !authSecret,
+  });
+});
+
+app.post("/api/tunnel/start", async (req, res) => {
+  const type = req.body.type || "cloudflare";
+  const authToken = req.body.authToken || undefined;
+
+  if (!authSecret) {
+    console.warn(
+      "[tunnel] WARNING: AUTH_SECRET is not set — tunnel is open to the internet without authentication!",
+    );
+  }
+
+  try {
+    const url = await tunnel.start({ type, authToken, port: Number(port) });
+    let qrDataUrl = null;
+    try {
+      qrDataUrl = await QRCode.toDataURL(url, {
+        width: 240,
+        margin: 2,
+        color: { dark: "#000000", light: "#ffffff" },
+      });
+    } catch (_) {}
+    res.json({
+      status: "ok",
+      url,
+      type,
+      qrDataUrl,
+      authSet: !!authSecret,
+      authWarning: !authSecret,
+    });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message });
+  }
+});
+
+app.post("/api/tunnel/stop", (req, res) => {
+  tunnel.stop();
+  res.json({ status: "ok", message: "Tunnel stopped." });
 });
 
 app.get("*", (req, res) => {

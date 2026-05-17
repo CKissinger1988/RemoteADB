@@ -56,6 +56,19 @@ const stopVideoBtn = document.getElementById("stopVideoBtn");
 const recordMicBtn = document.getElementById("recordMicBtn");
 const micDurationInput = document.getElementById("micDuration");
 
+// Tunnel UI elements
+const tunnelTypeSelect = document.getElementById("tunnelTypeSelect");
+const tunnelStartBtn = document.getElementById("tunnelStartBtn");
+const tunnelStopBtn = document.getElementById("tunnelStopBtn");
+const tunnelStatusLabel = document.getElementById("tunnelStatusLabel");
+const tunnelActivePanel = document.getElementById("tunnelActivePanel");
+const tunnelUrlDisplay = document.getElementById("tunnelUrlDisplay");
+const tunnelCopyBtn = document.getElementById("tunnelCopyBtn");
+const tunnelQrCode = document.getElementById("tunnelQrCode");
+const tunnelAuthWarning = document.getElementById("tunnelAuthWarning");
+const ngrokTokenRow = document.getElementById("ngrokTokenRow");
+const ngrokTokenInput = document.getElementById("ngrokToken");
+
 const backendUrl =
   window.location &&
   window.location.protocol &&
@@ -1010,6 +1023,85 @@ if (clearTerminalBtn) {
   );
 }
 
+// Tunnel controls
+if (tunnelTypeSelect) {
+  tunnelTypeSelect.addEventListener("change", () => {
+    if (ngrokTokenRow)
+      ngrokTokenRow.hidden = tunnelTypeSelect.value !== "ngrok";
+  });
+}
+
+if (tunnelStartBtn) {
+  tunnelStartBtn.addEventListener("click", async () => {
+    tunnelStartBtn.disabled = true;
+    if (tunnelStopBtn) tunnelStopBtn.disabled = true;
+    if (tunnelStatusLabel) {
+      tunnelStatusLabel.textContent =
+        "⏳ Starting tunnel (may take 10–30 s on first run)…";
+      tunnelStatusLabel.style.color = "";
+    }
+    appendStatus("Starting secure tunnel…", "info");
+    try {
+      const body = {
+        type: tunnelTypeSelect ? tunnelTypeSelect.value : "cloudflare",
+      };
+      if (body.type === "ngrok" && ngrokTokenInput && ngrokTokenInput.value) {
+        body.authToken = ngrokTokenInput.value.trim();
+      }
+      const data = await apiFetch("/api/tunnel/start", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      applyTunnelState(data);
+      appendStatus(`Tunnel active: ${data.url}`, "success");
+      if (data.authWarning) {
+        appendStatus(
+          "⚠️  No AUTH_SECRET set — tunnel is open to the internet without a password!",
+          "warn",
+        );
+      }
+    } catch (err) {
+      if (tunnelStatusLabel) {
+        tunnelStatusLabel.textContent = `❌ ${err.message}`;
+        tunnelStatusLabel.style.color = "#fca5a5";
+      }
+      if (tunnelStartBtn) tunnelStartBtn.disabled = false;
+      appendStatus(`Tunnel failed: ${err.message}`, "error");
+    }
+  });
+}
+
+if (tunnelStopBtn) {
+  tunnelStopBtn.addEventListener("click", async () => {
+    try {
+      await apiFetch("/api/tunnel/stop", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      applyTunnelState({ active: false, status: "idle" });
+      appendStatus("Tunnel stopped.", "info");
+    } catch (err) {
+      appendStatus(`Tunnel stop failed: ${err.message}`, "error");
+    }
+  });
+}
+
+if (tunnelCopyBtn) {
+  tunnelCopyBtn.addEventListener("click", () => {
+    if (!tunnelUrlDisplay || !tunnelUrlDisplay.value) return;
+    navigator.clipboard
+      .writeText(tunnelUrlDisplay.value)
+      .then(() => {
+        tunnelCopyBtn.textContent = "✓ Copied!";
+        setTimeout(() => (tunnelCopyBtn.textContent = "Copy"), 2000);
+      })
+      .catch(() => {
+        tunnelUrlDisplay.select();
+        document.execCommand("copy");
+      });
+  });
+}
+
 // Drag and Drop Logic for File Explorer
 if (fileManagerPanel) {
   ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
@@ -1062,6 +1154,44 @@ async function pollDevices() {
   await maybeAutoConnect(devices);
 }
 
+// ─── Tunnel Management ──────────────────────────────────────────────────────────────────────────────
+
+function applyTunnelState(data) {
+  if (!tunnelStatusLabel) return;
+  if (data.active) {
+    tunnelStatusLabel.textContent = `✅ Tunnel active — ${data.type}`;
+    tunnelStatusLabel.style.color = "#a7f3d0";
+    if (tunnelStartBtn) tunnelStartBtn.disabled = true;
+    if (tunnelStopBtn) tunnelStopBtn.disabled = false;
+    if (tunnelActivePanel) tunnelActivePanel.hidden = false;
+    if (tunnelUrlDisplay && data.url) tunnelUrlDisplay.value = data.url;
+    if (tunnelQrCode && data.qrDataUrl) {
+      tunnelQrCode.src = data.qrDataUrl;
+      tunnelQrCode.hidden = false;
+    }
+    if (tunnelAuthWarning) tunnelAuthWarning.hidden = !data.authWarning;
+  } else {
+    const text =
+      data.status === "starting"
+        ? "⏳ Starting tunnel…"
+        : data.status === "error"
+          ? `❌ Error: ${data.error || "unknown"}`
+          : "Tunnel: inactive";
+    tunnelStatusLabel.textContent = text;
+    tunnelStatusLabel.style.color = data.status === "error" ? "#fca5a5" : "";
+    if (tunnelStartBtn) tunnelStartBtn.disabled = data.status === "starting";
+    if (tunnelStopBtn) tunnelStopBtn.disabled = true;
+    if (tunnelActivePanel) tunnelActivePanel.hidden = true;
+  }
+}
+
+async function loadTunnelStatus() {
+  try {
+    const data = await apiFetch("/api/tunnel/status");
+    applyTunnelState(data);
+  } catch (_) {}
+}
+
 autoConnectToggle.checked = autoConnectEnabled;
 filePathInput.value = currentRemotePath;
 enableScreenControls(false);
@@ -1075,3 +1205,4 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && !isConnected) pollDevices();
 });
 checkForUpdates();
+loadTunnelStatus();

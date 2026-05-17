@@ -147,6 +147,50 @@
           <div id="installStatus" class="small-status">ADB Status: Unknown</div>
           <div id="installBanner" class="install-banner" hidden></div>
         </section>
+
+        <section class="panel">
+          <h2>Remote Access — Secure Tunnel</h2>
+          <p class="small-status">Expose this backend securely over the internet so Android devices on any network can connect — no port forwarding required.</p>
+
+          <div class="setting-row" style="margin-top:12px;">
+            <label for="tunnelTypeSelect">Provider:</label>
+            <select id="tunnelTypeSelect" class="tunnel-select">
+              <option value="cloudflare">Cloudflare (free · no account · auto-downloads binary)</option>
+              <option value="ngrok">ngrok (requires auth token)</option>
+            </select>
+          </div>
+
+          <div id="ngrokTokenRow" class="setting-row" hidden>
+            <label for="ngrokToken">ngrok auth token:</label>
+            <input id="ngrokToken" type="password" placeholder="Paste your ngrok authtoken here" aria-label="ngrok auth token" autocomplete="off" />
+          </div>
+
+          <div class="button-row" style="margin-top:12px;">
+            <button id="tunnelStartBtn" class="btn-primary">🌐 Start Tunnel</button>
+            <button id="tunnelStopBtn" class="btn-danger" disabled>⏹ Stop Tunnel</button>
+          </div>
+
+          <div id="tunnelStatusLabel" class="small-status" style="margin-top:8px;">Tunnel: inactive</div>
+
+          <div id="tunnelActivePanel" hidden>
+            <div id="tunnelAuthWarning" class="install-banner tunnel-auth-warning" hidden>
+              ⚠️ <strong>No AUTH_SECRET set</strong> — your ADB interface is publicly accessible without a password.
+              Set <code>AUTH_SECRET</code> in your environment and restart the backend to protect it.
+            </div>
+
+            <div class="tunnel-url-row">
+              <input id="tunnelUrlDisplay" type="text" readonly aria-label="Tunnel URL" class="tunnel-url-input" />
+              <button id="tunnelCopyBtn" class="btn-small">Copy</button>
+            </div>
+
+            <div id="tunnelQrContainer" class="tunnel-qr-container">
+              <img id="tunnelQrCode" class="tunnel-qr" alt="QR code — scan with Android device to load Remote ADB" />
+              <p class="small-status" style="text-align:center;margin-top:8px;">
+                Scan with your Android device camera or paste the URL into the Remote ADB companion app
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
