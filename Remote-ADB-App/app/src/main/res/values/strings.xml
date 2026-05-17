@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Remote ADB</string>
+    <string name="url_hint">http://127.0.0.1:5200</string>
+    <string name="go">Go</string>
+    <string name="pref_backend_url">backend_url</string>
+    <string name="default_backend_url">http://127.0.0.1:5200</string>
+    <string name="connection_error">Cannot reach backend. Check that the backend is running and ADB reverse is configured.</string>
+    <string name="retry">Retry</string>
+</resources>
