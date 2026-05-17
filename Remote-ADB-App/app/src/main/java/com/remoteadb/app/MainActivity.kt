@@ -2,7 +2,9 @@ package com.remoteadb.app
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.view.KeyEvent
@@ -16,8 +18,10 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
+import com.remoteadb.app.BuildConfig
 import com.remoteadb.app.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -43,6 +47,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.urlInput.setText(backendUrl)
         loadUrl(backendUrl)
+        checkForUpdates()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -151,5 +156,26 @@ class MainActivity : AppCompatActivity() {
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
         binding.webView.restoreState(savedInstanceState)
+    }
+
+    private fun checkForUpdates() {
+        Thread {
+            val update = UpdateChecker.checkForUpdate(BuildConfig.VERSION_NAME)
+            if (update != null) {
+                runOnUiThread { showUpdateDialog(update) }
+            }
+        }.start()
+    }
+
+    private fun showUpdateDialog(update: UpdateInfo) {
+        val target = update.downloadUrl.ifEmpty { update.releaseUrl }
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.update_available_title))
+            .setMessage(getString(R.string.update_available_message, update.currentVersion, update.latestVersion))
+            .setPositiveButton(getString(R.string.update_download)) { _, _ ->
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target)))
+            }
+            .setNegativeButton(getString(R.string.update_later), null)
+            .show()
     }
 }

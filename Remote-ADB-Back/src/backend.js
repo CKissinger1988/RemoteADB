@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { execFile, spawn } = require('child_process');
 const path = require('path');
+const { startUpdateChecker, getPendingUpdate, checkForUpdate, applyUpdate, getCurrentVersion } = require('./updater');
 const app = express();
 app.disable('x-powered-by');
 const port = process.env.PORT || 5200;
@@ -51,7 +52,7 @@ function isPublicPath(req) {
 }
 
 function isApiPath(req) {
-  return req.path.startsWith('/status') || req.path.startsWith('/files') || req.path.startsWith('/connect') || req.path.startsWith('/disconnect') || req.path.startsWith('/screen') || req.path.startsWith('/shell') || req.path.startsWith('/install');
+  return req.path.startsWith('/status') || req.path.startsWith('/files') || req.path.startsWith('/connect') || req.path.startsWith('/disconnect') || req.path.startsWith('/screen') || req.path.startsWith('/shell') || req.path.startsWith('/install') || req.path.startsWith('/api/');
 }
 
 app.use((req, res, next) => {
@@ -444,6 +445,33 @@ if (fs.existsSync(indexPath)) {
   });
 }
 
+app.get('/api/update-check', async (req, res) => {
+  const current = getCurrentVersion();
+  let update = getPendingUpdate();
+  if (!update) {
+    update = await checkForUpdate();
+  }
+  if (update) {
+    return res.json({ updateAvailable: true, current: update.current, latest: update.latest, downloadUrl: update.downloadUrl, releaseUrl: update.releaseUrl });
+  }
+  return res.json({ updateAvailable: false, current });
+});
+
+app.post('/api/update-apply', async (req, res) => {
+  let update = getPendingUpdate();
+  if (!update) {
+    update = await checkForUpdate();
+  }
+  if (!update) {
+    return res.json({ status: 'no-update', message: 'Already up to date.' });
+  }
+  if (!update.downloadUrl) {
+    return res.status(400).json({ status: 'error', message: 'No backend asset found in the latest release.' });
+  }
+  res.json({ status: 'updating', message: `Updating to v${update.latest}. Server will restart shortly.` });
+  setImmediate(() => applyUpdate(update.downloadUrl).catch((err) => console.error('[updater] Apply failed:', err.message)));
+});
+
 let watcherProc = null;
 let watcherBuffer = '';
 let watcherConnectedDevices = new Set();
@@ -511,6 +539,7 @@ const displayHost = host === '0.0.0.0' ? '0.0.0.0' : host;
 server.listen(port, host, () => {
   console.log(`Remote ADB backend listening on ${protocol}://${displayHost}:${port}`);
   startDeviceWatcher();
+  startUpdateChecker();
   if (useHttps) {
     console.log(`Using SSL key: ${sslKeyPath}`);
     console.log(`Using SSL cert: ${sslCertPath}`);

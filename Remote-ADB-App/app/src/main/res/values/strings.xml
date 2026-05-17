@@ -7,4 +7,8 @@
     <string name="default_backend_url">http://127.0.0.1:5200</string>
     <string name="connection_error">Cannot reach backend. Check that the backend is running and ADB reverse is configured.</string>
     <string name="retry">Retry</string>
+    <string name="update_available_title">Update Available</string>
+    <string name="update_available_message">v%1$s → v%2$s is available. Download now?</string>
+    <string name="update_download">Download</string>
+    <string name="update_later">Later</string>
 </resources>
