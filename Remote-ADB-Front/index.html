@@ -15,155 +15,147 @@
         <span id="versionLabel" class="version-badge">v1.0.0</span>
         <button id="themeToggle" class="theme-toggle-btn" title="Toggle Light/Dark Mode">🌓</button>
       </div>
-      <div class="status-bar">
-        <span id="backendStatus">Backend: unknown</span>
-        <span id="deviceState">Device: disconnected</span>
-      </div>
     </header>
+
+    <nav class="tab-nav" role="tablist" aria-label="Main navigation">
+      <button class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true" aria-controls="dashboard">Dashboard</button>
+      <button class="tab-btn" data-tab="files" role="tab" aria-selected="false" aria-controls="files">File Manager</button>
+      <button class="tab-btn" data-tab="media" role="tab" aria-selected="false" aria-controls="media">Media & Camera</button>
+      <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="settings">Settings</button>
+      <div class="status-indicators">
+        <span id="backendStatus" class="status-dot">Backend: unknown</span>
+        <span id="deviceState" class="status-dot">Device: disconnected</span>
+      </div>
+    </nav>
 
     <div id="updateNotification" class="install-banner" hidden></div>
 
-    <section class="panel">
-      <div class="field-group">
-        <label for="deviceId">Device ID</label>
-        <input id="deviceId" type="text" placeholder="emulator-5554 or leave blank for USB" />
-      </div>
-      <button id="connectBtn">Connect</button>
-      <button id="disconnectBtn" disabled>Disconnect</button>
-    </section>
+    <div class="tab-content">
+      <!-- Dashboard Tab -->
+      <div id="dashboard" class="tab-pane active" role="tabpanel" aria-labelledby="dashboard">
+        <div class="dashboard-grid">
+          <section class="panel device-panel">
+            <div class="panel-header">
+              <h2>Devices</h2>
+              <button id="refreshDevicesBtn" class="btn-icon">🔄</button>
+            </div>
+            <div class="field-group">
+              <input id="deviceId" type="text" placeholder="Connect by ID (e.g. emulator-5554)" aria-label="Device ID" />
+              <div class="button-row">
+                <button id="connectBtn" class="btn-primary">Connect</button>
+                <button id="disconnectBtn" class="btn-danger" disabled>Disconnect</button>
+              </div>
+            </div>
+            <div id="deviceList" class="device-list">
+              <div class="device-empty">Scanning for devices...</div>
+            </div>
+          </section>
 
-    <section class="panel auto-connect-panel">
-      <div class="panel-header">
-        <div>
-          <h2>Auto-connect</h2>
-          <p>Toggle startup auto-connect and choose devices for automatic reconnect.</p>
+          <section class="panel screen-panel">
+            <div class="panel-header">
+              <h2>Screen Control</h2>
+              <div class="button-row">
+                <button id="wakeUpBtn" disabled>Wake</button>
+                <button id="refreshScreenBtn" disabled>Refresh</button>
+              </div>
+            </div>
+            <div id="screenPreview" class="screen-preview" tabindex="0">
+              <span class="screen-placeholder">No device connected</span>
+            </div>
+          </section>
+
+          <section class="panel terminal-panel">
+            <div class="panel-header">
+              <h2>Quick Shell</h2>
+              <button id="clearTerminalBtn" class="btn-small">Clear</button>
+            </div>
+            <div id="terminalOutput" class="terminal-output"></div>
+            <div class="field-group horizontal">
+              <input id="commandInput" type="text" placeholder="Enter ADB shell command" aria-label="Shell command" />
+              <button id="sendCommandBtn" class="btn-primary" disabled>Execute</button>
+            </div>
+          </section>
         </div>
-        <label class="toggle-wrap">
-          <input id="autoConnectToggle" type="checkbox" /> Auto-connect on startup
-        </label>
-      </div>
-      <div class="button-row">
-        <button id="refreshDevicesBtn">Refresh devices</button>
-        <button id="installAdbBtn">Install ADB</button>
-        <span id="installStatus" class="install-status">ADB status unknown</span>
-      </div>
-      <div class="button-row" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-        <button id="checkUpdateBtn" class="secondary-button">Check for Updates</button>
-        <button id="applyUpdateBtn" hidden>Apply Update</button>
-      </div>
-      <div id="installBanner" class="install-banner" hidden></div>
-      <div id="deviceList" class="device-list">
-        <div class="device-row device-empty">Loading devices...</div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="field-group full-width">
-        <label for="commandInput">ADB Command</label>
-        <input id="commandInput" type="text" placeholder="adb shell getprop ro.product.model" />
-      </div>
-      <button id="sendCommandBtn" disabled>Send</button>
-    </section>
-
-    <section class="panel screen-panel">
-      <div class="panel-header">
-        <div>
-          <h2>Remote Screen Control</h2>
-          <p>View and interact with the connected device screen.</p>
-        </div>
-        <button id="wakeUpBtn" disabled>Wake Up</button>
-        <button id="refreshScreenBtn" disabled>Refresh Screen</button>
       </div>
 
-      <div id="screenPreview" class="screen-preview" tabindex="0" aria-label="Remote screen preview">
-        <span class="screen-placeholder">Remote screen preview</span>
+      <!-- Files Tab -->
+      <div id="files" class="tab-pane" role="tabpanel" aria-labelledby="files">
+        <section id="fileManagerPanel" class="panel file-manager-panel">
+          <div class="panel-header">
+            <h2>File Explorer</h2>
+            <div class="file-manager-actions">
+              <input id="filePathInput" type="text" placeholder="/sdcard" aria-label="Remote file path" />
+              <button id="browseFilesBtn">Browse</button>
+            </div>
+          </div>
+          <div class="file-manager-meta">
+            <span id="currentPathLabel">/sdcard</span>
+            <span id="fileManagerStatus" class="small-status">Ready</span>
+          </div>
+          <div id="remoteFileList" class="remote-file-list"></div>
+          <div class="upload-row">
+            <input id="uploadFileInput" type="file" aria-label="Select file to upload" />
+            <button id="uploadFileBtn">Upload to current dir</button>
+          </div>
+          <div id="uploadProgressContainer" class="upload-progress-wrapper" hidden>
+            <div class="progress-container">
+              <div id="uploadProgressBar" class="progress-bar"></div>
+              <span id="uploadProgressText" class="progress-text">0%</span>
+            </div>
+            <button id="cancelUploadBtn" class="btn-small btn-danger">Cancel</button>
+          </div>
+        </section>
       </div>
 
-      <div class="controls-grid">
-        <div class="field-group small">
-          <label for="tapX">Tap X</label>
-          <input id="tapX" type="number" placeholder="120" />
-        </div>
-        <div class="field-group small">
-          <label for="tapY">Tap Y</label>
-          <input id="tapY" type="number" placeholder="240" />
-        </div>
-        <button id="tapBtn" disabled>Tap</button>
-        <div class="field-group small">
-          <label for="swipeFrom">Swipe From</label>
-          <input id="swipeFrom" type="text" placeholder="x1,y1" />
-        </div>
-        <div class="field-group small">
-          <label for="swipeTo">Swipe To</label>
-          <input id="swipeTo" type="text" placeholder="x2,y2" />
-        </div>
-        <button id="swipeBtn" disabled>Swipe</button>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Remote Camera</h2>
-          <p>Launch the camera, capture photos, or record video clips.</p>
-        </div>
-        <div class="button-row">
-          <button id="openCameraBtn" disabled>Open Camera</button>
-          <button id="takePhotoBtn" disabled>Take Photo</button>
-          <button id="recordVideoBtn" disabled>Start Record</button>
-          <button id="stopVideoBtn" disabled>Stop Record</button>
-          <button id="getLatestPhotoBtn" disabled>Get Latest Media</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <h2>Remote Audio</h2>
-          <p>Record audio clips from the device microphone.</p>
-        </div>
-        <div class="button-row">
-          <div class="field-group small">
+      <!-- Media Tab -->
+      <div id="media" class="tab-pane" role="tabpanel" aria-labelledby="media">
+        <section class="panel">
+          <h2>Camera & Video</h2>
+          <div class="button-row">
+            <button id="openCameraBtn" disabled>Open App</button>
+            <button id="takePhotoBtn" disabled>Shutter</button>
+            <button id="recordVideoBtn" disabled>Start Rec</button>
+            <button id="stopVideoBtn" disabled>Stop & Pull</button>
+            <button id="getLatestPhotoBtn" disabled>Download Latest</button>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Audio Recording</h2>
+          <div class="field-group horizontal">
             <label for="micDuration">Duration (s)</label>
             <input id="micDuration" type="number" value="5" min="1" max="30" />
+            <button id="recordMicBtn" disabled>Record Mic</button>
           </div>
-          <button id="recordMicBtn" disabled>Record Clip</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel file-manager-panel">
-      <div class="panel-header">
-        <div>
-          <h2>Remote File Manager</h2>
-          <p>Browse device storage, download files, and upload content.</p>
-        </div>
-        <div class="file-manager-actions">
-          <input id="filePathInput" type="text" placeholder="/sdcard" />
-          <button id="browseFilesBtn">Browse</button>
-        </div>
+        </section>
       </div>
 
-      <div class="file-manager-meta">
-        <span id="currentPathLabel">Path: /sdcard</span>
-        <span id="fileManagerStatus" class="small-status">Ready</span>
+      <!-- Settings Tab -->
+      <div id="settings" class="tab-pane" role="tabpanel" aria-labelledby="settings">
+        <section class="panel">
+          <h2>System Configuration</h2>
+          <div class="setting-row">
+            <label class="toggle-wrap">
+              <input id="autoConnectToggle" type="checkbox" /> Auto-connect on startup
+            </label>
+          </div>
+          <hr />
+          <div class="button-row">
+            <button id="installAdbBtn">Reinstall ADB</button>
+            <button id="checkUpdateBtn" class="secondary-button">Check Updates</button>
+            <button id="applyUpdateBtn" class="btn-warn" hidden>Apply Update</button>
+          </div>
+          <div id="installStatus" class="small-status">ADB Status: Unknown</div>
+          <div id="installBanner" class="install-banner" hidden></div>
+        </section>
       </div>
-
-      <div id="remoteFileList" class="remote-file-list">
-        <div class="device-row device-empty">No files loaded.</div>
-      </div>
-
-      <div class="upload-row">
-        <input id="uploadFileInput" type="file" />
-        <button id="uploadFileBtn">Upload file</button>
-      </div>
-    </section>
+    </div>
 
     <section class="output-panel">
-      <h2>Status</h2>
-      <pre id="statusLog">Ready.</pre>
-    </section>
+      <div class="panel-header">
+        <h2>Console Logs</h2>
+        <button onclick="document.getElementById('statusLog').innerHTML=''" class="btn-small">Clear</button>
+      </div>
+      <div id="statusLog" class="log-container"></div>
   </main>
 
   <script src="app.js"></script>

@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+config.json
+
+# TLS certificates
+certs/
+
+# ADB binary (must be placed manually)
+installer/bin/
+
+# ADB temp files
+adb-pull-*
+adb-push-*
+remote_vid_*
+remote_mic_*
+
+# Android build outputs
+Remote-ADB-App/.gradle/
+Remote-ADB-App/app/build/
+Remote-ADB-App/build/
+Remote-ADB-App/local.properties

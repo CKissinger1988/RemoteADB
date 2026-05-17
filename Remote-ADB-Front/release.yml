@@ -1,0 +1,83 @@
+name: Build & Release Electron Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.1.0)'
+        required: true
+        default: 'v1.1.0'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Remote-ADB-Front/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: Remote-ADB-Front
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: Remote-ADB-Back
+        run: npm ci
+
+      - name: Read version from package.json
+        id: ver
+        working-directory: Remote-ADB-Front
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Build Electron app (Windows portable + NSIS installer)
+        working-directory: Remote-ADB-Front
+        run: npm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload portable EXE as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RemoteADB-${{ steps.ver.outputs.VERSION }}-portable
+          path: Remote-ADB-Front/dist/*.exe
+          retention-days: 90
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.VERSION }}
+          name: RemoteADB v${{ steps.ver.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: Remote-ADB-Front/dist/*.exe
+          body: |
+            ## RemoteADB v${{ steps.ver.outputs.VERSION }} — Desktop Release
+
+            ### Installation
+            - **Portable EXE**: Download and run directly, no installation required.
+            - **NSIS Installer**: Full installer with auto-update support.
+
+            ### What's included
+            - Remote-ADB-Front Electron desktop app
+            - Embedded Remote-ADB-Back Node.js server
+            - System tray icon with backend lifecycle management
+            - Auto-update via GitHub Releases
+
+            See the [README](https://github.com/CKissinger1988/RemoteADB#readme) for setup instructions.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

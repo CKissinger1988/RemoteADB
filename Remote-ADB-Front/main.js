@@ -1,9 +1,47 @@
-const { app, BrowserWindow, dialog, Tray, Menu, nativeImage } = require('electron');
-const { autoUpdater } = require('electron-updater');
-const path = require('path');
-const { spawn } = require('child_process');
-const net = require('net');
-const fs = require('fs');
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  Tray,
+  Menu,
+  nativeImage,
+} = require("electron");
+const { autoUpdater } = require("electron-updater");
+const path = require("path");
+const { spawn, execFileSync } = require("child_process");
+const net = require("net");
+const fs = require("fs");
+
+/**
+ * Resolve the adb executable path.
+ * Priority: ADB_PATH env var → installer/bin/adb.exe → system PATH (where/which adb).
+ */
+function resolveAdbPath() {
+  if (process.env.ADB_PATH && fs.existsSync(process.env.ADB_PATH)) {
+    return process.env.ADB_PATH;
+  }
+  const bundled = path.join(
+    __dirname,
+    "..",
+    "Remote-ADB-Back",
+    "installer",
+    "bin",
+    "adb.exe",
+  );
+  if (fs.existsSync(bundled)) return bundled;
+  try {
+    const cmd = process.platform === "win32" ? "where" : "which";
+    const result = execFileSync(cmd, ["adb"], {
+      encoding: "utf8",
+      timeout: 3000,
+    })
+      .trim()
+      .split(/\r?\n/)[0]
+      .trim();
+    if (result && fs.existsSync(result)) return result;
+  } catch (_) {}
+  return null;
+}
 
 let backendProcess = null;
 let tray = null;
@@ -11,33 +49,43 @@ let mainWindow = null;
 let keepBackendAlive = false;
 
 function startBackend(callback) {
-  const backendScript = path.join(__dirname, '..', 'Remote-ADB-Back', 'src', 'backend.js');
-  const backendDir = path.join(__dirname, '..', 'Remote-ADB-Back');
+  const backendScript = path.join(
+    __dirname,
+    "..",
+    "Remote-ADB-Back",
+    "src",
+    "backend.js",
+  );
+  const backendDir = path.join(__dirname, "..", "Remote-ADB-Back");
 
-  backendProcess = spawn('node', [backendScript], {
+  const adbPath = resolveAdbPath();
+  const backendEnv = { ...process.env, PORT: "5200" };
+  if (adbPath) backendEnv.ADB_PATH = adbPath;
+
+  backendProcess = spawn("node", [backendScript], {
     cwd: backendDir,
-    stdio: 'ignore',
-    env: { ...process.env, PORT: 5200 },
-    detached: true
+    stdio: "ignore",
+    env: backendEnv,
+    detached: true,
   });
 
-  backendProcess.on('exit', () => {
+  backendProcess.on("exit", () => {
     backendProcess = null;
     if (tray) createTrayMenu();
   });
 
-  backendProcess.on('error', (err) => {
-    console.error('Failed to start backend process:', err);
+  backendProcess.on("error", (err) => {
+    console.error("Failed to start backend process:", err);
   });
 
   if (callback) callback();
 }
 
 function getSavedPreference() {
-  const configPath = path.join(app.getPath('userData'), 'config.json');
+  const configPath = path.join(app.getPath("userData"), "config.json");
   try {
     if (fs.existsSync(configPath)) {
-      const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const data = JSON.parse(fs.readFileSync(configPath, "utf8"));
       return data.keepBackendAlive;
     }
   } catch (err) {}
@@ -45,9 +93,13 @@ function getSavedPreference() {
 }
 
 function savePreference(value) {
-  const configPath = path.join(app.getPath('userData'), 'config.json');
+  const configPath = path.join(app.getPath("userData"), "config.json");
   try {
-    fs.writeFileSync(configPath, JSON.stringify({ keepBackendAlive: value }), 'utf8');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({ keepBackendAlive: value }),
+      "utf8",
+    );
   } catch (err) {}
 }
 
@@ -59,13 +111,13 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false // Allows the app to talk to the local backend during testing
-    }
+      webSecurity: false, // Allows the app to talk to the local backend during testing
+    },
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile("index.html");
 
-  mainWindow.on('closed', () => {
+  mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
@@ -73,26 +125,52 @@ function createWindow() {
 function createTrayMenu() {
   if (!tray) return;
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show Remote ADB', click: () => { if (mainWindow) mainWindow.show(); else createWindow(); } },
-    { type: 'separator' },
-    { label: 'Backend: ' + (backendProcess ? 'Active' : 'Stopped'), enabled: false },
-    { label: 'Start Backend', enabled: !backendProcess, click: () => startBackend(createTrayMenu) },
-    { label: 'Restart Backend', enabled: !!backendProcess, click: () => {
+    {
+      label: "Show Remote ADB",
+      click: () => {
+        if (mainWindow) mainWindow.show();
+        else createWindow();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Backend: " + (backendProcess ? "Active" : "Stopped"),
+      enabled: false,
+    },
+    {
+      label: "Start Backend",
+      enabled: !backendProcess,
+      click: () => startBackend(createTrayMenu),
+    },
+    {
+      label: "Restart Backend",
+      enabled: !!backendProcess,
+      click: () => {
         backendProcess.kill();
         setTimeout(() => startBackend(createTrayMenu), 1000);
-      }
+      },
     },
-    { label: 'Stop Backend', enabled: !!backendProcess, click: () => backendProcess.kill() },
-    { type: 'separator' },
-    { label: 'Quit Application', click: () => { keepBackendAlive = false; app.quit(); } }
+    {
+      label: "Stop Backend",
+      enabled: !!backendProcess,
+      click: () => backendProcess.kill(),
+    },
+    { type: "separator" },
+    {
+      label: "Quit Application",
+      click: () => {
+        keepBackendAlive = false;
+        app.quit();
+      },
+    },
   ]);
   tray.setContextMenu(contextMenu);
 }
 
 function createTray() {
   let icon = null;
-  const icoPath = path.join(__dirname, 'favicon.ico');
-  const pngPath = path.join(__dirname, 'icon.png');
+  const icoPath = path.join(__dirname, "favicon.ico");
+  const pngPath = path.join(__dirname, "icon.png");
 
   if (fs.existsSync(icoPath)) {
     icon = icoPath;
@@ -100,12 +178,12 @@ function createTray() {
     icon = pngPath;
   } else {
     icon = nativeImage.createEmpty();
-    console.warn('No tray icon file found; using empty icon fallback.');
+    console.warn("No tray icon file found; using empty icon fallback.");
   }
 
   try {
     tray = new Tray(icon);
-    tray.setToolTip('Remote ADB Manager');
+    tray.setToolTip("Remote ADB Manager");
     createTrayMenu();
   } catch (err) {
     console.warn(`Failed to create tray icon: ${err.message}`);
@@ -115,26 +193,26 @@ function createTray() {
 
 app.whenReady().then(() => {
   createTray();
-  const socket = net.createConnection(5200, '127.0.0.1');
-  socket.on('connect', () => {
+  const socket = net.createConnection(5200, "127.0.0.1");
+  socket.on("connect", () => {
     socket.destroy();
-    console.log('Backend is already running.');
+    console.log("Backend is already running.");
     createWindow();
   });
-  socket.on('error', () => {
-    console.log('Backend not found, starting process...');
+  socket.on("error", () => {
+    console.log("Backend not found, starting process...");
     startBackend();
     createWindow();
   });
 });
 
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   // Keep the app alive in the tray even when the window is closed.
   // On macOS, it is standard for apps to stay active until Cmd+Q.
-  if (process.platform === 'darwin') app.dock.hide();
+  if (process.platform === "darwin") app.dock.hide();
 });
 
-app.on('before-quit', (event) => {
+app.on("before-quit", (event) => {
   if (backendProcess && !keepBackendAlive) {
     const savedPref = getSavedPreference();
     if (savedPref !== null) {
@@ -144,17 +222,19 @@ app.on('before-quit', (event) => {
     }
 
     const result = dialog.showMessageBoxSync({
-      type: 'question',
-      buttons: ['Keep Running', 'Stop Backend'],
+      type: "question",
+      buttons: ["Keep Running", "Stop Backend"],
       defaultId: 0,
       cancelId: 1,
-      title: 'Remote ADB',
-      message: 'Would you like to keep the ADB backend service running in the background?',
-      checkboxLabel: "Don't ask again"
+      title: "Remote ADB",
+      message:
+        "Would you like to keep the ADB backend service running in the background?",
+      checkboxLabel: "Don't ask again",
     });
 
-    const response = typeof result === 'object' ? result.response : result;
-    const checkboxChecked = typeof result === 'object' ? result.checkboxChecked : false;
+    const response = typeof result === "object" ? result.response : result;
+    const checkboxChecked =
+      typeof result === "object" ? result.checkboxChecked : false;
 
     if (response === 0) {
       keepBackendAlive = true;
@@ -167,7 +247,7 @@ app.on('before-quit', (event) => {
   }
 });
 
-app.on('will-quit', () => {
+app.on("will-quit", () => {
   if (backendProcess && !keepBackendAlive) {
     backendProcess.kill();
   }

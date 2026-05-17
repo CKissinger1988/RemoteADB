@@ -4,9 +4,25 @@ param(
   [string]$Host = "0.0.0.0"
 )
 
-function Require-Admin {
+function Ensure-Elevated {
   if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    throw 'This installer must be run as Administrator.'
+    $args = @()
+    if ($PSBoundParameters.ContainsKey('InstallDir')) { $args += "-InstallDir `"$InstallDir`"" }
+    if ($PSBoundParameters.ContainsKey('Port')) { $args += "-Port `"$Port`"" }
+    if ($PSBoundParameters.ContainsKey('Host')) { $args += "-Host `"$Host`"" }
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'powershell.exe'
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $($args -join ' ')"
+    $psi.Verb = 'runas'
+    $psi.UseShellExecute = $true
+
+    try {
+      [System.Diagnostics.Process]::Start($psi) | Out-Null
+      exit
+    } catch {
+      throw 'Administrator privileges are required to run this installer.'
+    }
   }
 }
 
@@ -65,7 +81,7 @@ function Start-Backend {
   Write-Host "Backend started on http://localhost:$Port"
 }
 
-Require-Admin
+Ensure-Elevated
 Check-Node
 Install-Backend
 $script = Create-StartupScript

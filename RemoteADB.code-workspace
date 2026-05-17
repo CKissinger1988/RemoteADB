@@ -1,17 +1,10 @@
 {
   "folders": [
-    {
-      "path": "Remote-ADB-Android"
-    },
-    {
-      "path": "Remote-ADB-Back"
-    },
-    {
-      "path": "Remote-ADB-Control"
-    },
-    {
-      "path": "Remote-ADB-Front"
-    }
+    { "path": "Remote-ADB-Android" },
+    { "path": "Remote-ADB-App" },
+    { "path": "Remote-ADB-Back" },
+    { "path": "Remote-ADB-Control" },
+    { "path": "Remote-ADB-Front" }
   ],
   "settings": {},
   "extensions": {
@@ -52,9 +45,32 @@
         "problemMatcher": []
       },
       {
-        "label": "Run Remote-ADB-Android installer",
+        "label": "Install Remote-ADB-Back (Windows)",
         "type": "shell",
-        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/Remote-ADB-Android/install.ps1\"",
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/Remote-ADB-Back/install-backend.ps1\"",
+        "problemMatcher": []
+      },
+      {
+        "label": "Install Remote-ADB-Control dependencies",
+        "type": "shell",
+        "command": "npm install",
+        "options": {
+          "cwd": "${workspaceFolder}/Remote-ADB-Control"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Start Remote-ADB-Control",
+        "type": "shell",
+        "command": "npm start",
+        "options": {
+          "cwd": "${workspaceFolder}/Remote-ADB-Control"
+        },
+        "isBackground": true,
+        "presentation": {
+          "reveal": "always",
+          "panel": "shared"
+        },
         "problemMatcher": []
       }
     ]

@@ -1,0 +1,96 @@
+name: Build & Release Backend ZIP
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.1.0)'
+        required: true
+        default: 'v1.1.0'
+
+jobs:
+  release-backend:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: Remote-ADB-Back/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: Remote-ADB-Back
+        run: npm ci
+
+      - name: Read version from package.json
+        id: ver
+        working-directory: Remote-ADB-Back
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Package backend into ZIP
+        run: |
+          $version = "${{ steps.ver.outputs.VERSION }}"
+          $zipName = "remote-adb-windows-v${version}.zip"
+          $include = @(
+            "Remote-ADB-Back",
+            "Remote-ADB-Front/index.html",
+            "Remote-ADB-Front/login.html",
+            "Remote-ADB-Front/app.js",
+            "Remote-ADB-Front/login.js",
+            "Remote-ADB-Front/styles.css",
+            "Remote-ADB-Front/favicon.ico"
+          )
+          # Copy relevant files to staging dir
+          $staging = "release-staging"
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          foreach ($item in $include) {
+            $dest = Join-Path $staging $item
+            $parent = Split-Path $dest -Parent
+            New-Item -ItemType Directory -Force -Path $parent | Out-Null
+            Copy-Item -Path $item -Destination $dest -Recurse -Exclude "node_modules","dist","*.log"
+          }
+          Compress-Archive -Path "$staging\*" -DestinationPath $zipName -Force
+          echo "ZIP_NAME=$zipName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Upload backend ZIP as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-adb-windows-v${{ steps.ver.outputs.VERSION }}
+          path: remote-adb-windows-v${{ steps.ver.outputs.VERSION }}.zip
+          retention-days: 90
+
+      - name: Attach backend ZIP to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.VERSION }}
+          name: RemoteADB v${{ steps.ver.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          files: remote-adb-windows-v${{ steps.ver.outputs.VERSION }}.zip
+          body: |
+            ## RemoteADB v${{ steps.ver.outputs.VERSION }} — Backend ZIP
+
+            ### Manual Install (no Electron)
+            1. Download and extract `remote-adb-windows-v${{ steps.ver.outputs.VERSION }}.zip`
+            2. Run `npm install` in `Remote-ADB-Back/`
+            3. Run `node Remote-ADB-Back/src/backend.js`
+            4. Open `http://127.0.0.1:5200` in a browser
+
+            ### Auto-Update
+            The Electron desktop app will detect this release and offer an in-app update prompt.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
