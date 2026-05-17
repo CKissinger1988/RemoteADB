@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remote ADB Login</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell login-shell">
+    <section class="panel login-panel">
+      <h1>Remote ADB Login</h1>
+      <p>Enter the access secret to view the remote ADB dashboard.</p>
+      <form id="loginForm">
+        <div class="field-group">
+          <label for="passwordInput">Access Secret</label>
+          <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Enter secret" required />
+        </div>
+        <button type="submit">Sign In</button>
+        <div id="loginError" class="login-error" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

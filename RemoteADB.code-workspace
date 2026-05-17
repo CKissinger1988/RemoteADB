@@ -1,0 +1,62 @@
+{
+  "folders": [
+    {
+      "path": "Remote-ADB-Android"
+    },
+    {
+      "path": "Remote-ADB-Back"
+    },
+    {
+      "path": "Remote-ADB-Control"
+    },
+    {
+      "path": "Remote-ADB-Front"
+    }
+  ],
+  "settings": {},
+  "extensions": {
+    "recommendations": [
+      "ms-vscode.powershell"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Install Remote-ADB-Back dependencies",
+        "type": "shell",
+        "command": "npm install",
+        "options": {
+          "cwd": "${workspaceFolder}/Remote-ADB-Back"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Start Remote-ADB-Back",
+        "type": "shell",
+        "command": "npm start",
+        "options": {
+          "cwd": "${workspaceFolder}/Remote-ADB-Back"
+        },
+        "isBackground": true,
+        "presentation": {
+          "reveal": "always",
+          "panel": "shared"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Open Remote-ADB-Front in browser",
+        "type": "shell",
+        "command": "powershell.exe -NoProfile -Command \"Start-Process 'http://127.0.0.1:5200'\"",
+        "problemMatcher": []
+      },
+      {
+        "label": "Run Remote-ADB-Android installer",
+        "type": "shell",
+        "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/Remote-ADB-Android/install.ps1\"",
+        "problemMatcher": []
+      }
+    ]
+  }
+}
