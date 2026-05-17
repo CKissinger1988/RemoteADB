@@ -5,7 +5,7 @@ const https = require('https');
 const os = require('os');
 const crypto = require('crypto');
 const express = require('express');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const path = require('path');
 const app = express();
 app.disable('x-powered-by');
@@ -293,6 +293,7 @@ app.post('/install', async (req, res) => {
   try {
     const output = await runInstaller();
     const available = await isAdbAvailable();
+    if (available) startDeviceWatcher();
     res.json({
       status: 'ok',
       adbInstalled: available,
@@ -443,6 +444,64 @@ if (fs.existsSync(indexPath)) {
   });
 }
 
+let watcherProc = null;
+let watcherBuffer = '';
+let watcherConnectedDevices = new Set();
+
+function parseTrackDevicesPayload(payload) {
+  return payload
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line)
+    .map((line) => {
+      const parts = line.split('\t');
+      return { id: parts[0] && parts[0].trim(), status: parts[1] && parts[1].trim() };
+    })
+    .filter((d) => d.id && d.status);
+}
+
+function startDeviceWatcher() {
+  if (!adbInstalled() || watcherProc) return;
+
+  watcherProc = spawn(adbPath, ['track-devices']);
+  watcherBuffer = '';
+
+  watcherProc.stdout.on('data', (chunk) => {
+    watcherBuffer += chunk.toString('binary');
+    while (watcherBuffer.length >= 4) {
+      const lenHex = watcherBuffer.slice(0, 4);
+      const len = parseInt(lenHex, 16);
+      if (isNaN(len)) { watcherBuffer = ''; break; }
+      if (watcherBuffer.length < 4 + len) break;
+      const payload = watcherBuffer.slice(4, 4 + len);
+      watcherBuffer = watcherBuffer.slice(4 + len);
+      const devices = parseTrackDevicesPayload(payload);
+      const nowConnected = new Set(devices.filter((d) => d.status === 'device').map((d) => d.id));
+      for (const id of nowConnected) {
+        if (!watcherConnectedDevices.has(id)) {
+          console.log(`Device connected: ${id} — setting up reverse port forwarding...`);
+          runAdb(['-s', id, 'reverse', `tcp:${port}`, `tcp:${port}`])
+            .then(() => console.log(`Reverse tcp:${port} set for ${id}`))
+            .catch((err) => console.warn(`Reverse setup failed for ${id}: ${err.message}`));
+        }
+      }
+      watcherConnectedDevices = nowConnected;
+    }
+  });
+
+  watcherProc.on('error', (err) => {
+    console.warn(`Device watcher error: ${err.message}`);
+  });
+
+  watcherProc.on('exit', () => {
+    watcherProc = null;
+    watcherBuffer = '';
+    if (adbInstalled()) {
+      setTimeout(startDeviceWatcher, 3000);
+    }
+  });
+}
+
 const server = useHttps
   ? https.createServer({ key: fs.readFileSync(sslKeyPath), cert: fs.readFileSync(sslCertPath) }, app)
   : http.createServer(app);
@@ -451,6 +510,7 @@ const protocol = useHttps ? 'https' : 'http';
 const displayHost = host === '0.0.0.0' ? '0.0.0.0' : host;
 server.listen(port, host, () => {
   console.log(`Remote ADB backend listening on ${protocol}://${displayHost}:${port}`);
+  startDeviceWatcher();
   if (useHttps) {
     console.log(`Using SSL key: ${sslKeyPath}`);
     console.log(`Using SSL cert: ${sslCertPath}`);
