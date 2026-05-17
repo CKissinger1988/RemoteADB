@@ -1,0 +1,43 @@
+{
+  "name": "remote-adb-desktop",
+  "version": "1.0.0",
+  "description": "Desktop interface for Remote ADB Management",
+  "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CKissinger1988/RemoteADB.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.remoteadb.desktop",
+    "productName": "RemoteADB",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "CKissinger1988",
+        "repo": "RemoteADB"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": ["portable", "nsis"],
+      "signingHashAlgorithms": ["sha256"]
+    },
+    "files": [
+      "**/*",
+      "!dist/*"
+    ]
+  }
+}

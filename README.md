@@ -1,32 +1,46 @@
 # RemoteADB Workspace
 
-This workspace groups the four RemoteADB subprojects and provides quick start instructions.
+This workspace includes the RemoteADB backend, frontend, Android installer, and desktop control UI.
 
 Projects:
-- Remote-ADB-Android — installer scripts for adb.exe (silent install + persistence)
-- Remote-ADB-Back — Node backend serving API and static frontend
-- Remote-ADB-Front — static web frontend UI
-- Remote-ADB-Control — small controller UI (renderer scripts)
+- `Remote-ADB-Android` — ADB installer scripts for Android/Windows persistence.
+- `Remote-ADB-Back` — Node backend service with ADB device control and frontend hosting.
+- `Remote-ADB-Front` — Web-based frontend UI and Electron desktop wrapper.
+- `Remote-ADB-Control` — additional controller UI renderer scripts.
 
-Quick start (development):
+## Quick start (backend + browser frontend)
+
 1. Open `RemoteADB.code-workspace` in VS Code.
-2. In the `Remote-ADB-Back` folder run:
+2. In `Remote-ADB-Back` run:
    - `npm install`
    - `npm start`
-3. Open the frontend in a browser: `http://127.0.0.1:5200`
+3. In `Remote-ADB-Front` run:
+   - `npm install`
+4. Open the frontend in a browser at `http://127.0.0.1:5200`
 
-Install ADB (optional, for full device access):
+## Electron desktop frontend
+
+1. In `Remote-ADB-Front` run:
+   - `npm install`
+   - `npm start`
+2. The Electron app will launch and connect to the backend on `http://127.0.0.1:5200`.
+
+## Install ADB (optional)
+
 1. Copy `adb.exe` into `Remote-ADB-Back/installer/bin/`.
-2. Run the installer as Administrator: `installer/install.ps1` (PowerShell).
+2. Run `Remote-ADB-Back/installer/install.ps1` from PowerShell.
 
-VS Code tasks included in the workspace:
-- Install Remote-ADB-Back dependencies
-- Start Remote-ADB-Back
-- Open Remote-ADB-Front in browser
-- Run Remote-ADB-Android installer
+The installer now requests Administrator elevation automatically if it is not already running elevated.
 
-Security notes:
-- To enable authentication for the backend set `AUTH_SECRET` before starting the server.
-- To enable HTTPS set `HTTPS`, `SSL_KEY`, and `SSL_CERT` environment variables.
+## Environment variables
 
-If you want, I can start the backend now and open the frontend in your browser.
+- `AUTH_SECRET` — enable frontend login authentication.
+- `HTTPS` — set to `true` to enable HTTPS.
+- `SSL_KEY` / `SSL_CERT` — paths to TLS key and certificate.
+- `REDIRECT_PORT` — optional HTTP redirect port when HTTPS is enabled.
+
+## Notes
+
+- The backend hosts the frontend and API together for same-origin access.
+- The Electron frontend includes a tray menu and connects to the backend automatically if available.
+- If backend authentication is enabled, users must sign in with the secret before using the app.

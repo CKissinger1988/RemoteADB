@@ -1,19 +1,36 @@
 # Remote-ADB-Front
 
-A simple static web app starter for remote ADB control.
+Web frontend and Electron desktop UI for remote ADB control.
 
 ## Usage
 
-1. Start the backend in `Remote-ADB-Back` first.
-2. Open `index.html` in the browser.
-3. Optionally enable Auto-connect on startup.
-4. Refresh devices, choose one or use a device ID, then click Connect.
-5. Use the screen preview, refresh, tap, swipe, or shell commands.
+### Browser mode
+
+1. Start the backend in `Remote-ADB-Back`.
+2. Open the browser at `http://127.0.0.1:5200`.
+
+### Electron mode
+
+1. In `Remote-ADB-Front`, run:
+   - `npm install`
+   - `npm start`
+2. The Electron app will launch and connect to the backend if available.
+
+## Features
+
+- Device list with per-device auto-connect toggles
+- Connect using a selected device ID or the default USB device
+- Remote shell command execution
+- Remote screen refresh, tap, swipe, and wake-up control
+- Remote camera launch, photo capture, and video recording support
+- Remote audio recording support (requires device support)
+- Dark/light theme toggle
+- Status log for realtime backend feedback
 
 ## Notes
 
-- The frontend now uses the same origin as the page for backend API calls when served through the backend.
-- If you host the backend over HTTPS, open the app at `https://<pc-ip>:5200` on your phone.
-- The backend will auto-install ADB when needed.
-- The new device list supports per-device auto-connect toggles.
-- If auto-connect is enabled and a saved device is present, the frontend attempts to connect on load.
+- The frontend uses same-origin API calls when served through the backend.
+- For HTTPS access, use `https://<pc-ip>:5200` and set the backend TLS environment variables.
+- If `AUTH_SECRET` is set on the backend, the UI will require login.
+- If ADB is missing, the backend can install it via the elevated installer.
+- Auto-connect devices are remembered in local storage and attempted on page load.

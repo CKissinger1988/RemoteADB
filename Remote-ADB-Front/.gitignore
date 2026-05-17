@@ -1,0 +1,18 @@
+# Dependency directories
+node_modules/
+Remote-ADB-Back/node_modules/
+Remote-ADB-Front/node_modules/
+
+# Environment variables / Secrets
+.env
+Remote-ADB-Back/certs/*.key
+Remote-ADB-Back/certs/*.crt
+
+# Binary files
+Remote-ADB-Back/installer/bin/adb.exe
+Remote-ADB-Front/dist/
+
+# Logs and temporary files
+npm-debug.log*
+*.tmp
+.DS_Store

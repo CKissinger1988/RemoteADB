@@ -10,12 +10,18 @@
   <main class="app-shell">
     <header>
       <h1>Remote ADB Front</h1>
-      <p>Simple web UI for remote ADB command control.</p>
+      <div class="header-info">
+        <p>Simple web UI for remote ADB command control.</p>
+        <span id="versionLabel" class="version-badge">v1.0.0</span>
+        <button id="themeToggle" class="theme-toggle-btn" title="Toggle Light/Dark Mode">🌓</button>
+      </div>
       <div class="status-bar">
         <span id="backendStatus">Backend: unknown</span>
         <span id="deviceState">Device: disconnected</span>
       </div>
     </header>
+
+    <div id="updateNotification" class="install-banner" hidden></div>
 
     <section class="panel">
       <div class="field-group">
@@ -41,6 +47,10 @@
         <button id="installAdbBtn">Install ADB</button>
         <span id="installStatus" class="install-status">ADB status unknown</span>
       </div>
+      <div class="button-row" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+        <button id="checkUpdateBtn" class="secondary-button">Check for Updates</button>
+        <button id="applyUpdateBtn" hidden>Apply Update</button>
+      </div>
       <div id="installBanner" class="install-banner" hidden></div>
       <div id="deviceList" class="device-list">
         <div class="device-row device-empty">Loading devices...</div>
@@ -61,6 +71,7 @@
           <h2>Remote Screen Control</h2>
           <p>View and interact with the connected device screen.</p>
         </div>
+        <button id="wakeUpBtn" disabled>Wake Up</button>
         <button id="refreshScreenBtn" disabled>Refresh Screen</button>
       </div>
 
@@ -87,6 +98,38 @@
           <input id="swipeTo" type="text" placeholder="x2,y2" />
         </div>
         <button id="swipeBtn" disabled>Swipe</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Remote Camera</h2>
+          <p>Launch the camera, capture photos, or record video clips.</p>
+        </div>
+        <div class="button-row">
+          <button id="openCameraBtn" disabled>Open Camera</button>
+          <button id="takePhotoBtn" disabled>Take Photo</button>
+          <button id="recordVideoBtn" disabled>Start Record</button>
+          <button id="stopVideoBtn" disabled>Stop Record</button>
+          <button id="getLatestPhotoBtn" disabled>Get Latest Media</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Remote Audio</h2>
+          <p>Record audio clips from the device microphone.</p>
+        </div>
+        <div class="button-row">
+          <div class="field-group small">
+            <label for="micDuration">Duration (s)</label>
+            <input id="micDuration" type="number" value="5" min="1" max="30" />
+          </div>
+          <button id="recordMicBtn" disabled>Record Clip</button>
+        </div>
       </div>
     </section>
 

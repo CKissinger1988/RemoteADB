@@ -20,6 +20,7 @@ const uploadFileBtn = document.getElementById('uploadFileBtn');
 const currentPathLabel = document.getElementById('currentPathLabel');
 const fileManagerStatusLabel = document.getElementById('fileManagerStatus');
 const refreshScreenBtn = document.getElementById('refreshScreenBtn');
+const wakeUpBtn = document.getElementById('wakeUpBtn');
 const tapBtn = document.getElementById('tapBtn');
 const swipeBtn = document.getElementById('swipeBtn');
 const tapXInput = document.getElementById('tapX');
@@ -28,12 +29,28 @@ const swipeFromInput = document.getElementById('swipeFrom');
 const swipeToInput = document.getElementById('swipeTo');
 const screenPreview = document.getElementById('screenPreview');
 
+const versionLabel = document.getElementById('versionLabel');
+const checkUpdateBtn = document.getElementById('checkUpdateBtn');
+const applyUpdateBtn = document.getElementById('applyUpdateBtn');
+const updateNotification = document.getElementById('updateNotification');
+const themeToggle = document.getElementById('themeToggle');
+
+const openCameraBtn = document.getElementById('openCameraBtn');
+const takePhotoBtn = document.getElementById('takePhotoBtn');
+const getLatestPhotoBtn = document.getElementById('getLatestPhotoBtn');
+const recordVideoBtn = document.getElementById('recordVideoBtn');
+const stopVideoBtn = document.getElementById('stopVideoBtn');
+
+const recordMicBtn = document.getElementById('recordMicBtn');
+const micDurationInput = document.getElementById('micDuration');
+
 const backendUrl = (window.location && window.location.protocol && window.location.protocol.startsWith('http'))
   ? `${window.location.protocol}//${window.location.host}`
   : 'http://127.0.0.1:5200';
 let isConnected = false;
 let currentDeviceId = '';
 let currentRemotePath = '/sdcard';
+let deviceResolution = { x: 1080, y: 1920 };
 let adbInstalled = false;
 let autoConnectEnabled = localStorage.getItem('adbAutoConnectEnabled') === 'true';
 let autoConnectDevices = new Set(JSON.parse(localStorage.getItem('adbAutoConnectDevices') || '[]'));
@@ -96,9 +113,16 @@ function updateConnectionButtons() {
 
 function enableScreenControls(enabled) {
   refreshScreenBtn.disabled = !enabled;
+  if (wakeUpBtn) wakeUpBtn.disabled = !enabled;
   tapBtn.disabled = !enabled;
   swipeBtn.disabled = !enabled;
   sendCommandBtn.disabled = !enabled;
+  if (openCameraBtn) openCameraBtn.disabled = !enabled;
+  if (takePhotoBtn) takePhotoBtn.disabled = !enabled;
+  if (getLatestPhotoBtn) getLatestPhotoBtn.disabled = !enabled;
+  if (recordVideoBtn) recordVideoBtn.disabled = !enabled;
+  if (stopVideoBtn) stopVideoBtn.disabled = true;
+  if (recordMicBtn) recordMicBtn.disabled = !enabled;
 }
 
 function showScreenPlaceholder() {
@@ -127,7 +151,7 @@ function parseCoordinates(value) {
 
 async function apiFetch(path, options = {}) {
   const response = await fetch(`${backendUrl}${path}`, {
-    credentials: 'same-origin',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -146,6 +170,13 @@ async function checkBackend() {
     setBackendStatus('online');
     adbInstalled = status.adbInstalled;
     setInstallStatus(adbInstalled ? 'ADB installed' : 'ADB not installed', adbInstalled);
+
+    if (!adbInstalled) {
+      setInstallBanner('ADB is missing on the host. Please click "Install ADB" to set up the environment.', false);
+    } else if (installBanner.textContent.includes('missing')) {
+      setInstallBanner(null);
+    }
+
     updateConnectionButtons();
     return status.devices || [];
   } catch (error) {
@@ -382,6 +413,7 @@ async function connectDevice(deviceIdOverride) {
     enableScreenControls(true);
     appendStatus(`Connected to ${currentDeviceId}. Reverse forwarding configured.`);
     await refreshDevices();
+    await fetchDeviceResolution();
     await refreshScreen();
   } catch (error) {
     appendStatus(`Connect failed: ${error.message}`);
@@ -406,6 +438,172 @@ async function disconnectDevice() {
   disconnectBtn.disabled = true;
   enableScreenControls(false);
   showScreenPlaceholder();
+}
+
+async function fetchLatestPhoto() {
+  if (!isConnected) return;
+  appendStatus('Fetching latest photo from device...');
+  try {
+    const query = new URLSearchParams({ deviceId: currentDeviceId });
+    const response = await apiFetch(`/camera/latest?${query}`);
+    const binary = Uint8Array.from(atob(response.data), (c) => c.charCodeAt(0));
+    const blob = new Blob([binary], { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = response.name || 'latest_photo.jpg';
+    anchor.click();
+    URL.revokeObjectURL(url);
+    appendStatus(`Downloaded: ${response.name}`);
+  } catch (error) {
+    appendStatus(`Failed to fetch photo: ${error.message}`);
+  }
+}
+
+async function checkForUpdates(manual = false) {
+  if (manual) appendStatus('Checking for updates...');
+  try {
+    const update = await apiFetch('/api/update-check');
+    if (versionLabel) versionLabel.textContent = `v${update.current}`;
+
+    if (update.updateAvailable) {
+      const message = `New version available: v${update.latest}. <a href="${update.releaseUrl}" target="_blank" style="color:inherit; text-decoration: underline;">View release notes</a>.`;
+      updateNotification.innerHTML = message;
+      updateNotification.hidden = false;
+      applyUpdateBtn.hidden = false;
+      appendStatus(`Update available: v${update.latest}`);
+    } else {
+      if (manual) {
+        appendStatus('You are already using the latest version.');
+        updateNotification.textContent = 'You are using the latest version.';
+        updateNotification.hidden = false;
+        setTimeout(() => { updateNotification.hidden = true; }, 3000);
+      }
+    }
+  } catch (error) {
+    console.error('Update check failed:', error);
+    if (manual) appendStatus(`Update check failed: ${error.message}`);
+  }
+}
+
+async function applyUpdateUI() {
+  if (!confirm('The server will download the update and restart. You will be disconnected. Proceed?')) {
+    return;
+  }
+
+  appendStatus('Applying update...');
+  applyUpdateBtn.disabled = true;
+  try {
+    const response = await apiFetch('/api/update-apply', { method: 'POST' });
+    appendStatus(response.message || 'Updating...');
+    updateNotification.textContent = 'Server is updating and restarting. Please wait...';
+    
+    // Disconnect UI
+    isConnected = false;
+    enableScreenControls(false);
+    
+    // Reload after a delay to allow the server to restart
+    setTimeout(() => {
+      window.location.reload();
+    }, 10000);
+  } catch (error) {
+    appendStatus(`Apply update failed: ${error.message}`);
+    applyUpdateBtn.disabled = false;
+  }
+}
+
+async function takePhoto() {
+  if (!isConnected) return;
+  appendStatus('Triggering shutter...');
+  try {
+    await sendShellCommand('input keyevent 27'); // KEYCODE_CAMERA
+    appendStatus('Photo taken. Use "Get Latest Media" to download if it does not appear in file manager.');
+  } catch (error) {
+    appendStatus(`Failed to take photo: ${error.message}`);
+  }
+}
+
+async function startRecordVideo() {
+  if (!isConnected) return;
+  appendStatus('Starting video recording...');
+  try {
+    await apiFetch('/camera/record/start', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId: currentDeviceId }),
+    });
+    recordVideoBtn.disabled = true;
+    stopVideoBtn.disabled = false;
+    appendStatus('Recording... Screen interactions will be captured. Click Stop to finish.');
+  } catch (error) {
+    appendStatus(`Failed to start recording: ${error.message}`);
+  }
+}
+
+async function stopRecordVideo() {
+  if (!isConnected) return;
+  appendStatus('Stopping recording and fetching file...');
+  stopVideoBtn.disabled = true;
+  try {
+    const response = await apiFetch('/camera/record/stop', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId: currentDeviceId }),
+    });
+    const binary = Uint8Array.from(atob(response.data), (c) => c.charCodeAt(0));
+    const blob = new Blob([binary], { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = response.name;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    appendStatus(`Downloaded video: ${response.name}`);
+  } catch (error) {
+    appendStatus(`Failed to stop recording: ${error.message}`);
+  } finally {
+    recordVideoBtn.disabled = false;
+    stopVideoBtn.disabled = true;
+  }
+}
+
+async function recordMic() {
+  if (!isConnected) return;
+  const duration = micDurationInput.value || 5;
+  appendStatus(`Recording mic for ${duration}s...`);
+  recordMicBtn.disabled = true;
+  try {
+    const response = await apiFetch('/mic/record', {
+      method: 'POST',
+      body: JSON.stringify({ deviceId: currentDeviceId, duration }),
+    });
+    const binary = Uint8Array.from(atob(response.data), (c) => c.charCodeAt(0));
+    const blob = new Blob([binary], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = response.name;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    appendStatus(`Downloaded mic recording: ${response.name}`);
+  } catch (error) {
+    appendStatus(`Mic recording failed: ${error.message}`);
+  } finally {
+    recordMicBtn.disabled = false;
+  }
+}
+
+async function wakeUpDevice() {
+  if (!isConnected) return;
+  appendStatus('Waking up and unlocking device...');
+  try {
+    // 224 is KEYCODE_WAKEUP (API 20+). 82 is KEYCODE_MENU, which dismisses simple lockscreens.
+    // We chain them to ensure the screen turns on and attempts to bypass the swipe layer.
+    await sendShellCommand('input keyevent 224 && input keyevent 82');
+    appendStatus('Wake up sequence sent.');
+    // Short delay to allow the screen to illuminate before refreshing the preview
+    setTimeout(refreshScreen, 1000);
+  } catch (error) {
+    appendStatus(`Wake up failed: ${error.message}`);
+  }
 }
 
 async function refreshScreen() {
@@ -464,6 +662,29 @@ uploadFileBtn.addEventListener('click', async () => {
   await uploadRemoteFile();
 });
 
+if (openCameraBtn) {
+  openCameraBtn.addEventListener('click', () => sendShellCommand('am start -a android.media.action.STILL_IMAGE_CAMERA'));
+}
+
+if (takePhotoBtn) {
+  takePhotoBtn.addEventListener('click', takePhoto);
+}
+
+if (getLatestPhotoBtn) {
+  getLatestPhotoBtn.addEventListener('click', fetchLatestPhoto);
+}
+
+if (wakeUpBtn) {
+  wakeUpBtn.addEventListener('click', wakeUpDevice);
+}
+
+if (recordVideoBtn) recordVideoBtn.addEventListener('click', startRecordVideo);
+if (stopVideoBtn) stopVideoBtn.addEventListener('click', stopRecordVideo);
+
+if (recordMicBtn) {
+  recordMicBtn.addEventListener('click', recordMic);
+}
+
 autoConnectToggle.addEventListener('change', (event) => {
   autoConnectEnabled = event.target.checked;
   saveAutoConnectSettings();
@@ -517,6 +738,14 @@ refreshScreenBtn.addEventListener('click', async () => {
   await refreshScreen();
 });
 
+if (checkUpdateBtn) {
+  checkUpdateBtn.addEventListener('click', () => checkForUpdates(true));
+}
+
+if (applyUpdateBtn) {
+  applyUpdateBtn.addEventListener('click', applyUpdateUI);
+}
+
 tapBtn.addEventListener('click', async () => {
   const x = Number(tapXInput.value.trim());
   const y = Number(tapYInput.value.trim());
@@ -539,6 +768,18 @@ swipeBtn.addEventListener('click', async () => {
   await sendShellCommand(`input swipe ${from.x} ${from.y} ${to.x} ${to.y} 250`);
 });
 
+// Theme Toggle Logic
+const savedTheme = localStorage.getItem('theme') || 'dark';
+if (savedTheme === 'light') {
+  document.body.classList.add('light-mode');
+}
+
+themeToggle.addEventListener('click', () => {
+  document.body.classList.toggle('light-mode');
+  const newTheme = document.body.classList.contains('light-mode') ? 'light' : 'dark';
+  localStorage.setItem('theme', newTheme);
+});
+
 screenPreview.addEventListener('click', async (event) => {
   if (!isConnected) {
     appendStatus('Connect first to interact with the screen.');
@@ -546,13 +787,13 @@ screenPreview.addEventListener('click', async (event) => {
   }
 
   const rect = screenPreview.getBoundingClientRect();
-  const x = Math.round(((event.clientX - rect.left) / rect.width) * 1080);
-  const y = Math.round(((event.clientY - rect.top) / rect.height) * 1920);
+  const x = Math.round(((event.clientX - rect.left) / rect.width) * deviceResolution.x);
+  const y = Math.round(((event.clientY - rect.top) / rect.height) * deviceResolution.y);
   await sendShellCommand(`input tap ${x} ${y}`);
 });
 
 async function pollDevices() {
-  if (isConnected) return;
+  if (isConnected || document.visibilityState !== 'visible') return;
   const devices = await checkBackend();
   renderDeviceList(devices);
   await maybeAutoConnect(devices);
@@ -564,4 +805,5 @@ enableScreenControls(false);
 showScreenPlaceholder();
 updateConnectionButtons();
 refreshDevices();
+checkForUpdates();
 setInterval(pollDevices, 5000);

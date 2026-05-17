@@ -18,7 +18,7 @@ const sslCertPath = process.env.SSL_CERT || path.join(__dirname, '..', 'certs', 
 const redirectPort = useHttps
   ? Number(process.env.REDIRECT_PORT || Number(port) + 1)
   : undefined;
-const frontRoot = path.join(__dirname, '..', '..', 'Remote-ADB-Front');
+const frontRoot = path.resolve(__dirname, '..', '..', 'Remote-ADB-Front');
 const authSecret = process.env.AUTH_SECRET || null;
 const authCookieName = 'remote_adb_auth';
 const authToken = authSecret
@@ -27,6 +27,10 @@ const authToken = authSecret
 
 const adbPath = process.env.ADB_PATH || path.join(__dirname, '..', 'installer', 'bin', 'adb.exe');
 const installScript = path.join(__dirname, '..', 'installer', 'install.ps1');
+
+let recordingProc = null;
+let recordingDevice = null;
+let recordingPath = '';
 
 app.use(express.json({ limit: '1mb' }));
 
@@ -42,6 +46,14 @@ function parseCookies(cookieHeader) {
   return cookies;
 }
 
+// World-class cleanup: ensure device-side recording stops if backend exits
+process.on('SIGINT', async () => {
+  if (recordingProc && recordingDevice) {
+    await runAdb(['-s', recordingDevice, 'shell', 'pkill -2 screenrecord']).catch(() => {});
+  }
+  process.exit(0);
+});
+
 function isPublicPath(req) {
   const safeStatic = ['.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.json'];
   const publicPaths = ['/login', '/login.html', '/login.js', '/styles.css', '/favicon.ico', '/manifest.json'];
@@ -52,7 +64,7 @@ function isPublicPath(req) {
 }
 
 function isApiPath(req) {
-  return req.path.startsWith('/status') || req.path.startsWith('/files') || req.path.startsWith('/connect') || req.path.startsWith('/disconnect') || req.path.startsWith('/screen') || req.path.startsWith('/shell') || req.path.startsWith('/install') || req.path.startsWith('/api/');
+  return req.path.startsWith('/status') || req.path.startsWith('/files') || req.path.startsWith('/connect') || req.path.startsWith('/disconnect') || req.path.startsWith('/screen') || req.path.startsWith('/shell') || req.path.startsWith('/install') || req.path.startsWith('/camera') || req.path.startsWith('/mic') || req.path.startsWith('/api/');
 }
 
 app.use((req, res, next) => {
@@ -92,10 +104,6 @@ app.use((req, res, next) => {
 app.options('*', (req, res) => res.sendStatus(204));
 
 app.post('/login', (req, res) => {
-  if (!authSecret) {
-    return res.status(404).json({ status: 'error', message: 'Authentication disabled' });
-  }
-
   const { secret } = req.body || {};
   if (!secret || secret !== authSecret) {
     return res.status(401).json({ status: 'error', message: 'Invalid access secret' });
@@ -113,10 +121,6 @@ app.post('/login', (req, res) => {
 });
 
 app.post('/logout', (req, res) => {
-  if (!authSecret) {
-    return res.status(404).json({ status: 'error', message: 'Authentication disabled' });
-  }
-
   res.clearCookie(authCookieName, { path: '/' });
   res.json({ status: 'ok', message: 'Logged out' });
 });
@@ -186,7 +190,7 @@ function escapeAdbShellArg(value) {
 function parseFileList(output, basePath) {
   return output
     .split(/\r?\n/)
-    .filter((line) => line && !line.startsWith('total'))
+    .filter((line) => line && !line.startsWith('total') && !line.includes('Permission denied'))
     .map((line) => {
       const trimmed = line.trim();
       const match = trimmed.match(/^([\-ld].*?)\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+\d+\s+\S+\s+(.+)$/);
@@ -251,7 +255,11 @@ function isSafeRemotePath(remotePath) {
 
 function runInstaller() {
   return new Promise((resolve, reject) => {
-    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', installScript], { timeout: 120000 }, (error, stdout, stderr) => {
+    const escapedScript = installScript.replace(/"/g, '""');
+    const command = `Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File "${escapedScript}"' -Verb RunAs -Wait`;
+    const args = ['-NoProfile', '-Command', command];
+
+    execFile('powershell.exe', args, { timeout: 300000 }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error((stderr || error.message).toString().trim()));
         return;
@@ -407,6 +415,94 @@ app.post('/disconnect', async (req, res) => {
   }
 });
 
+app.get('/camera/latest', async (req, res) => {
+  const deviceId = req.query.deviceId;
+  try {
+    if (!(await isAdbAvailable())) {
+      throw new Error('ADB is not installed or not available.');
+    }
+    const dir = '/sdcard/DCIM/Camera';
+    const fileName = (await runAdb(buildAdbArgs(deviceId, ['shell', `ls -1t ${dir} | head -n 1`]))).trim();
+    
+    if (!fileName || fileName.includes('No such file') || fileName === '') {
+      return res.status(404).json({ status: 'error', message: 'No recent camera files found.' });
+    }
+
+    const remotePath = `${dir}/${fileName}`;
+    const content = await runAdbPull(deviceId, remotePath);
+    res.json({ status: 'ok', name: fileName, data: content.toString('base64') });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.post('/camera/record/start', async (req, res) => {
+  const { deviceId } = req.body;
+  if (recordingProc) return res.status(400).json({ status: 'error', message: 'Recording already in progress.' });
+
+  try {
+    if (!(await isAdbAvailable())) {
+      throw new Error('ADB is not installed or not available.');
+    }
+
+    recordingDevice = deviceId;
+    recordingPath = `/sdcard/remote_vid_${Date.now()}.mp4`;
+    const args = buildAdbArgs(deviceId, ['shell', 'screenrecord', '--time-limit', '180', recordingPath]);
+    recordingProc = spawn(adbPath, args);
+    
+    recordingProc.on('exit', () => { recordingProc = null; });
+    res.json({ status: 'ok', message: 'Recording started (max 3 mins).' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.post('/camera/record/stop', async (req, res) => {
+  if (!recordingProc && !recordingPath) return res.status(400).json({ status: 'error', message: 'No recording in progress or available.' });
+
+  try {
+    if (recordingProc) {
+      await runAdb(buildAdbArgs(recordingDevice, ['shell', 'pkill -2 screenrecord']));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    
+    const content = await runAdbPull(recordingDevice, recordingPath);
+    await runAdb(buildAdbArgs(recordingDevice, ['shell', 'rm', recordingPath]));
+    
+    recordingProc = null;
+    res.json({ status: 'ok', name: path.basename(recordingPath), data: content.toString('base64') });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+app.post('/mic/record', async (req, res) => {
+  const { deviceId, duration = 5 } = req.body;
+  const timeoutMs = (Number(duration) + 15) * 1000;
+
+  try {
+    if (!(await isAdbAvailable())) {
+      throw new Error('ADB is not installed or not available.');
+    }
+
+    const remotePath = `/sdcard/remote_mic_${Date.now()}.wav`;
+    const args = buildAdbArgs(deviceId, ['shell', `tinycap ${remotePath} -t ${duration}`]);
+    
+    await new Promise((resolve, reject) => {
+      execFile(adbPath, args, { timeout: timeoutMs }, (error) => {
+        if (error) return reject(new Error(`Recording failed. Ensure 'tinycap' exists on the device. Error: ${error.message}`));
+        resolve();
+      });
+    });
+
+    const content = await runAdbPull(deviceId, remotePath);
+    await runAdb(buildAdbArgs(deviceId, ['shell', `rm ${remotePath}`]));
+    res.json({ status: 'ok', name: `remote_mic_${Date.now()}.wav`, data: content.toString('base64') });
+  } catch (error) {
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
 app.get('/screen', async (req, res) => {
   const deviceId = req.query.deviceId;
   try {
@@ -438,13 +534,6 @@ app.post('/shell', async (req, res) => {
   }
 });
 
-const indexPath = path.join(frontRoot, 'index.html');
-if (fs.existsSync(indexPath)) {
-  app.get('*', (req, res) => {
-    res.sendFile(indexPath);
-  });
-}
-
 app.get('/api/update-check', async (req, res) => {
   const current = getCurrentVersion();
   let update = getPendingUpdate();
@@ -470,6 +559,12 @@ app.post('/api/update-apply', async (req, res) => {
   }
   res.json({ status: 'updating', message: `Updating to v${update.latest}. Server will restart shortly.` });
   setImmediate(() => applyUpdate(update.downloadUrl).catch((err) => console.error('[updater] Apply failed:', err.message)));
+});
+
+app.get('*', (req, res) => {
+  const indexPath = path.join(frontRoot, 'index.html');
+  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  res.status(404).send('Frontend not found.');
 });
 
 let watcherProc = null;

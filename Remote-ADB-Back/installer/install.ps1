@@ -4,9 +4,25 @@ param(
   [string]$StartupScript = "$env:ProgramData\RemoteADBBack\startup.ps1"
 )
 
-function Require-Admin {
+function Ensure-Elevated {
   if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    throw 'This installer must be run as Administrator.'
+    $argList = @()
+    if ($PSBoundParameters.ContainsKey('InstallDir')) { $argList += "-InstallDir `"$InstallDir`"" }
+    if ($PSBoundParameters.ContainsKey('AdbBinary')) { $argList += "-AdbBinary `"$AdbBinary`"" }
+    if ($PSBoundParameters.ContainsKey('StartupScript')) { $argList += "-StartupScript `"$StartupScript`"" }
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'powershell.exe'
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" $($argList -join ' ')"
+    $psi.Verb = 'runas'
+    $psi.UseShellExecute = $true
+
+    try {
+      [System.Diagnostics.Process]::Start($psi) | Out-Null
+      exit
+    } catch {
+      throw 'Administrator privileges are required to run this installer.'
+    }
   }
 }
 
@@ -20,7 +36,7 @@ function Copy-Adb {
 }
 
 function Configure-Persistence {
-  $taskName = 'RemoteADBBackStartup'
+  $taskName = 'RemoteADBServer'
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$StartupScript`""
   $trigger = New-ScheduledTaskTrigger -AtLogOn
   $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest
@@ -43,7 +59,7 @@ Start-Process -FilePath `"$InstallDir\adb.exe`" -ArgumentList 'reverse tcp:5200 
   $script | Set-Content -Path $StartupScript -Force -Encoding UTF8
 }
 
-Require-Admin
+Ensure-Elevated
 Copy-Adb
 Create-StartupScript
 Configure-Persistence

@@ -4,8 +4,8 @@ const path = require('path');
 const os = require('os');
 const { execFile, spawn } = require('child_process');
 
-const GITHUB_REPO = 'CKissinger1988/RemoteADB';
-const BACKEND_ASSET_PATTERN = /^remote-adb-backend-v[\d.]+\.zip$/;
+const GITHUB_REPO = process.env.GITHUB_REPO || 'CKissinger1988/RemoteADB';
+const BACKEND_ASSET_PATTERN = /^remote-adb-windows-v[\d.]+\.zip$/;
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 let _pendingUpdate = null;
@@ -38,6 +38,7 @@ function httpsGet(url, redirectCount) {
         'User-Agent': 'RemoteADB-Updater',
         'Accept': 'application/vnd.github.v3+json',
       },
+      timeout: 10000 // Native timeout handling
     };
     const req = https.get(url, options, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirectCount < 5) {
@@ -55,7 +56,10 @@ function httpsGet(url, redirectCount) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Request timeout')); });
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
   });
 }
 
@@ -105,16 +109,16 @@ async function applyUpdate(downloadUrl) {
   const tmpDir = os.tmpdir();
   const zipPath = path.join(tmpDir, 'remoteadb-update.zip');
   const extractDir = path.join(tmpDir, 'remoteadb-update');
-  const installDir = path.resolve(path.join(__dirname, '..'));
+  const installDir = path.resolve(path.join(__dirname, '..', '..'));
 
   console.log('[updater] Downloading update...');
   await httpsDownload(downloadUrl, zipPath);
   console.log('[updater] Extracting...');
 
   await new Promise((resolve, reject) => {
-    const psCmd = `if (Test-Path '${extractDir}') { Remove-Item -Recurse -Force '${extractDir}' }; ` +
-                  `Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force`;
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psCmd], { timeout: 60000 }, (err) => {
+    const cmd = `if (Test-Path '${extractDir}') { Remove-Item -Recurse -Force '${extractDir}' }; Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force`;
+
+    execFile('powershell.exe', ['-NoProfile', '-Command', cmd], { timeout: 60000 }, (err) => {
       if (err) return reject(new Error(`Extraction failed: ${err.message}`));
       resolve();
     });
@@ -122,8 +126,9 @@ async function applyUpdate(downloadUrl) {
 
   console.log('[updater] Copying files...');
   await new Promise((resolve, reject) => {
-    const psCmd = `Copy-Item -Recurse -Force '${extractDir}\\*' '${installDir}' -ErrorAction Stop`;
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psCmd], { timeout: 30000 }, (err) => {
+    const cmd = `xcopy /s /e /y /i "${extractDir}\\*" "${installDir}\\"`;
+
+    execFile('cmd.exe', ['/c', cmd], { timeout: 30000 }, (err) => {
       if (err) return reject(new Error(`Copy failed: ${err.message}`));
       resolve();
     });
@@ -133,14 +138,12 @@ async function applyUpdate(downloadUrl) {
   console.log('[updater] Update applied. Restarting...');
 
   execFile('schtasks', ['/run', '/tn', 'RemoteADBServer'], (err) => {
-    if (err) {
-      const child = spawn(process.execPath, process.argv.slice(1), {
-        detached: true,
-        stdio: 'ignore',
-        cwd: process.cwd(),
-      });
-      child.unref();
-    }
+    const child = spawn(process.execPath, process.argv.slice(1), {
+      detached: true,
+      stdio: 'ignore',
+      cwd: process.cwd(),
+    });
+    child.unref();
     setTimeout(() => process.exit(0), 500);
   });
 }
