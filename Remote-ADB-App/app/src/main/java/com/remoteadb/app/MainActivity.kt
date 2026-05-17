@@ -17,10 +17,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
+import com.google.android.material.snackbar.Snackbar
 import com.remoteadb.app.BuildConfig
 import com.remoteadb.app.databinding.ActivityMainBinding
 
@@ -56,7 +56,6 @@ class MainActivity : AppCompatActivity() {
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
-                databaseEnabled = true
                 loadWithOverviewMode = true
                 useWideViewPort = true
                 builtInZoomControls = false
@@ -84,9 +83,19 @@ class MainActivity : AppCompatActivity() {
                 ) {
                     if (request.isForMainFrame) {
                         binding.progressBar.isVisible = false
-                        val msg = getString(R.string.connection_error)
-                        Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                        showConnectionError()
                     }
+                }
+
+                @Deprecated("Deprecated in Java")
+                override fun onReceivedError(
+                    view: WebView,
+                    errorCode: Int,
+                    description: String,
+                    failingUrl: String
+                ) {
+                    binding.progressBar.isVisible = false
+                    showConnectionError()
                 }
 
                 override fun onReceivedSslError(
@@ -156,6 +165,12 @@ class MainActivity : AppCompatActivity() {
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
         binding.webView.restoreState(savedInstanceState)
+    }
+
+    private fun showConnectionError() {
+        Snackbar.make(binding.root, getString(R.string.connection_error), Snackbar.LENGTH_LONG)
+            .setAction(getString(R.string.retry)) { binding.webView.reload() }
+            .show()
     }
 
     private fun checkForUpdates() {

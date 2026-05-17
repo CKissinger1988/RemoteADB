@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
-    paths:
-      - 'Remote-ADB-App/**'
 
 jobs:
   build:
@@ -37,26 +35,35 @@ jobs:
       - name: Write local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > Remote-ADB-App/local.properties
 
+      - name: Read version name
+        id: ver
+        working-directory: Remote-ADB-App
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle | sed "s/.*versionName[[:space:]]*['\"]//;s/['\"].*//")
+          echo "name=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "apk=remote-adb-v$VERSION.apk" >> $GITHUB_OUTPUT
+
       - name: Build Debug APK
         working-directory: Remote-ADB-App
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon
 
       - name: Rename APK
         run: |
           cp Remote-ADB-App/app/build/outputs/apk/debug/app-debug.apk \
-             Remote-ADB-App/app/build/outputs/apk/debug/remote-adb-v1.0.0.apk
+             Remote-ADB-App/app/build/outputs/apk/debug/${{ steps.ver.outputs.apk }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: remote-adb-apk
-          path: Remote-ADB-App/app/build/outputs/apk/debug/remote-adb-v1.0.0.apk
+          path: Remote-ADB-App/app/build/outputs/apk/debug/${{ steps.ver.outputs.apk }}
           retention-days: 30
 
-      - name: Upload APK to GitHub Release v1.0.0
+      - name: Upload APK to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload v1.0.0 \
-            Remote-ADB-App/app/build/outputs/apk/debug/remote-adb-v1.0.0.apk \
+          gh release upload ${{ steps.ver.outputs.tag }} \
+            Remote-ADB-App/app/build/outputs/apk/debug/${{ steps.ver.outputs.apk }} \
             --repo ${{ github.repository }} --clobber
