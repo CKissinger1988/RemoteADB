@@ -68,6 +68,18 @@ const tunnelQrCode = document.getElementById("tunnelQrCode");
 const tunnelAuthWarning = document.getElementById("tunnelAuthWarning");
 const ngrokTokenRow = document.getElementById("ngrokTokenRow");
 const ngrokTokenInput = document.getElementById("ngrokToken");
+const sshFields = document.getElementById("sshFields");
+const sshHostInput = document.getElementById("sshHost");
+const sshPortInput = document.getElementById("sshPort");
+const sshUsernameInput = document.getElementById("sshUsername");
+const sshAuthTypeSelect = document.getElementById("sshAuthType");
+const sshPasswordRow = document.getElementById("sshPasswordRow");
+const sshPasswordInput = document.getElementById("sshPassword");
+const sshKeyRow = document.getElementById("sshKeyRow");
+const sshPrivateKeyInput = document.getElementById("sshPrivateKey");
+const sshPassphraseRow = document.getElementById("sshPassphraseRow");
+const sshPassphraseInput = document.getElementById("sshPassphrase");
+const sshRemotePortInput = document.getElementById("sshRemotePort");
 
 const backendUrl =
   window.location &&
@@ -1026,8 +1038,19 @@ if (clearTerminalBtn) {
 // Tunnel controls
 if (tunnelTypeSelect) {
   tunnelTypeSelect.addEventListener("change", () => {
-    if (ngrokTokenRow)
-      ngrokTokenRow.hidden = tunnelTypeSelect.value !== "ngrok";
+    const v = tunnelTypeSelect.value;
+    if (ngrokTokenRow) ngrokTokenRow.hidden = v !== "ngrok";
+    if (sshFields) sshFields.hidden = v !== "ssh";
+  });
+}
+
+// SSH auth type toggle (password ↔ key)
+if (sshAuthTypeSelect) {
+  sshAuthTypeSelect.addEventListener("change", () => {
+    const isKey = sshAuthTypeSelect.value === "key";
+    if (sshPasswordRow) sshPasswordRow.hidden = isKey;
+    if (sshKeyRow) sshKeyRow.hidden = !isKey;
+    if (sshPassphraseRow) sshPassphraseRow.hidden = !isKey;
   });
 }
 
@@ -1047,6 +1070,51 @@ if (tunnelStartBtn) {
       };
       if (body.type === "ngrok" && ngrokTokenInput && ngrokTokenInput.value) {
         body.authToken = ngrokTokenInput.value.trim();
+      }
+      if (body.type === "ssh") {
+        body.sshHost = sshHostInput?.value.trim() || "";
+        body.sshPort = Number(sshPortInput?.value) || 22;
+        body.sshUsername = sshUsernameInput?.value.trim() || "";
+        body.sshRemotePort = Number(sshRemotePortInput?.value) || 5200;
+        const authType = sshAuthTypeSelect?.value || "password";
+        if (authType === "key") {
+          body.sshPrivateKey = sshPrivateKeyInput?.value || "";
+          body.sshPassphrase = sshPassphraseInput?.value || "";
+        } else {
+          body.sshPassword = sshPasswordInput?.value || "";
+        }
+        // Basic client-side validation
+        if (!body.sshHost) {
+          appendStatus("SSH: host is required.", "error");
+          if (tunnelStartBtn) tunnelStartBtn.disabled = false;
+          if (tunnelStatusLabel)
+            tunnelStatusLabel.textContent = "❌ SSH host is required.";
+          return;
+        }
+        if (!body.sshUsername) {
+          appendStatus("SSH: username is required.", "error");
+          if (tunnelStartBtn) tunnelStartBtn.disabled = false;
+          if (tunnelStatusLabel)
+            tunnelStatusLabel.textContent = "❌ SSH username is required.";
+          return;
+        }
+        if (authType === "password" && !body.sshPassword) {
+          appendStatus(
+            "SSH: password is required (or switch to Private Key auth).",
+            "error",
+          );
+          if (tunnelStartBtn) tunnelStartBtn.disabled = false;
+          if (tunnelStatusLabel)
+            tunnelStatusLabel.textContent = "❌ SSH password is required.";
+          return;
+        }
+        if (authType === "key" && !body.sshPrivateKey.trim()) {
+          appendStatus("SSH: private key is required.", "error");
+          if (tunnelStartBtn) tunnelStartBtn.disabled = false;
+          if (tunnelStatusLabel)
+            tunnelStatusLabel.textContent = "❌ SSH private key is required.";
+          return;
+        }
       }
       const data = await apiFetch("/api/tunnel/start", {
         method: "POST",

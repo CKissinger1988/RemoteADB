@@ -144,6 +144,16 @@ The `Remote-ADB-App` APK can be installed on an Android device to provide a nati
 
 ## 📋 Changelog
 
+### v1.2.1
+- **Added** SSH Reverse Tunnel as a third tunnel provider — bring your own SSH server, no third-party services required
+  - Supports both **password** and **PEM private key** (with optional passphrase) authentication
+  - Uses `ssh2` npm package for a pure-Node.js implementation — no system SSH binary required
+  - UI: SSH credential form (host, port, username, auth type, password/key, key passphrase, remote port) shown dynamically when SSH is selected
+  - Client-side validation before submission
+  - Requires `GatewayPorts yes` on the SSH server's `sshd_config`
+  - Tunnel URL: `http://<ssh-host>:<remote-port>`
+  - 20-second connection timeout with descriptive error messages
+
 ### v1.2.0
 - **Added** Secure Tunnel feature — expose the backend over the internet from any network, no port forwarding needed
   - **Cloudflare Quick Tunnels** (default): free, no account required; `cloudflared` binary auto-downloaded to `~/.remoteadb/bin/` on first use; tunnel URL is a `*.trycloudflare.com` HTTPS endpoint

@@ -157,12 +157,58 @@
             <select id="tunnelTypeSelect" class="tunnel-select">
               <option value="cloudflare">Cloudflare (free · no account · auto-downloads binary)</option>
               <option value="ngrok">ngrok (requires auth token)</option>
+              <option value="ssh">SSH Reverse Tunnel (bring your own server)</option>
             </select>
           </div>
 
           <div id="ngrokTokenRow" class="setting-row" hidden>
             <label for="ngrokToken">ngrok auth token:</label>
             <input id="ngrokToken" type="password" placeholder="Paste your ngrok authtoken here" aria-label="ngrok auth token" autocomplete="off" />
+          </div>
+
+          <div id="sshFields" class="tunnel-ssh-fields" hidden>
+            <div class="tunnel-field-row">
+              <label for="sshHost">SSH Host:</label>
+              <input id="sshHost" type="text" placeholder="your-server.com or 1.2.3.4" aria-label="SSH host" autocomplete="off" />
+            </div>
+            <div class="tunnel-field-row tunnel-field-row-split">
+              <span class="tunnel-field-pair">
+                <label for="sshPort">SSH Port:</label>
+                <input id="sshPort" type="number" value="22" min="1" max="65535" aria-label="SSH port" class="tunnel-port-input" />
+              </span>
+              <span class="tunnel-field-pair">
+                <label for="sshRemotePort">Remote Port:</label>
+                <input id="sshRemotePort" type="number" value="5200" min="1" max="65535" aria-label="Remote port on SSH server" class="tunnel-port-input" />
+              </span>
+            </div>
+            <div class="tunnel-field-row">
+              <label for="sshUsername">Username:</label>
+              <input id="sshUsername" type="text" placeholder="ubuntu" aria-label="SSH username" autocomplete="username" />
+            </div>
+            <div class="tunnel-field-row">
+              <label for="sshAuthType">Auth:</label>
+              <select id="sshAuthType" class="tunnel-select">
+                <option value="password">Password</option>
+                <option value="key">Private Key (PEM)</option>
+              </select>
+            </div>
+            <div id="sshPasswordRow" class="tunnel-field-row">
+              <label for="sshPassword">Password:</label>
+              <input id="sshPassword" type="password" placeholder="SSH password" aria-label="SSH password" autocomplete="current-password" />
+            </div>
+            <div id="sshKeyRow" class="tunnel-field-row" hidden>
+              <label for="sshPrivateKey">Private Key:</label>
+              <textarea id="sshPrivateKey" rows="5" placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;(paste PEM key here)&#10;-----END RSA PRIVATE KEY-----" aria-label="SSH private key (PEM)" class="tunnel-key-textarea"></textarea>
+            </div>
+            <div id="sshPassphraseRow" class="tunnel-field-row" hidden>
+              <label for="sshPassphrase">Passphrase:</label>
+              <input id="sshPassphrase" type="password" placeholder="Key passphrase (leave blank if none)" aria-label="SSH key passphrase" autocomplete="off" />
+            </div>
+            <p class="small-status tunnel-ssh-hint">
+              ℹ️ Your SSH server needs <code>GatewayPorts yes</code> (or <code>clientspecified</code>) in
+              <code>sshd_config</code>. The tunnel URL will be
+              <code>http://&lt;ssh-host&gt;:&lt;remote-port&gt;</code>.
+            </p>
           </div>
 
           <div class="button-row" style="margin-top:12px;">

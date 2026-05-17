@@ -794,7 +794,21 @@ app.post("/api/tunnel/start", async (req, res) => {
   }
 
   try {
-    const url = await tunnel.start({ type, authToken, port: Number(port) });
+    const url = await tunnel.start({
+      type,
+      port: Number(port),
+      // ngrok
+      authToken,
+      // ssh — pass through all credential fields from the request body
+      // (private key / passphrase are NEVER logged)
+      sshHost: req.body.sshHost || undefined,
+      sshPort: req.body.sshPort || undefined,
+      sshUsername: req.body.sshUsername || undefined,
+      sshPassword: req.body.sshPassword || undefined,
+      sshPrivateKey: req.body.sshPrivateKey || undefined,
+      sshPassphrase: req.body.sshPassphrase || undefined,
+      sshRemotePort: req.body.sshRemotePort || undefined,
+    });
     let qrDataUrl = null;
     try {
       qrDataUrl = await QRCode.toDataURL(url, {
