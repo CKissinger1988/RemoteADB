@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remote ADB Front</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header>
+      <h1>Remote ADB Front</h1>
+      <p>Simple web UI for remote ADB command control.</p>
+      <div class="status-bar">
+        <span id="backendStatus">Backend: unknown</span>
+        <span id="deviceState">Device: disconnected</span>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="field-group">
+        <label for="deviceId">Device ID</label>
+        <input id="deviceId" type="text" placeholder="emulator-5554 or leave blank for USB" />
+      </div>
+      <button id="connectBtn">Connect</button>
+      <button id="disconnectBtn" disabled>Disconnect</button>
+    </section>
+
+    <section class="panel auto-connect-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Auto-connect</h2>
+          <p>Toggle startup auto-connect and choose devices for automatic reconnect.</p>
+        </div>
+        <label class="toggle-wrap">
+          <input id="autoConnectToggle" type="checkbox" /> Auto-connect on startup
+        </label>
+      </div>
+      <div class="button-row">
+        <button id="refreshDevicesBtn">Refresh devices</button>
+        <button id="installAdbBtn">Install ADB</button>
+        <span id="installStatus" class="install-status">ADB status unknown</span>
+      </div>
+      <div id="installBanner" class="install-banner" hidden></div>
+      <div id="deviceList" class="device-list">
+        <div class="device-row device-empty">Loading devices...</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="field-group full-width">
+        <label for="commandInput">ADB Command</label>
+        <input id="commandInput" type="text" placeholder="adb shell getprop ro.product.model" />
+      </div>
+      <button id="sendCommandBtn" disabled>Send</button>
+    </section>
+
+    <section class="panel screen-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Remote Screen Control</h2>
+          <p>View and interact with the connected device screen.</p>
+        </div>
+        <button id="refreshScreenBtn" disabled>Refresh Screen</button>
+      </div>
+
+      <div id="screenPreview" class="screen-preview" tabindex="0" aria-label="Remote screen preview">
+        <span class="screen-placeholder">Remote screen preview</span>
+      </div>
+
+      <div class="controls-grid">
+        <div class="field-group small">
+          <label for="tapX">Tap X</label>
+          <input id="tapX" type="number" placeholder="120" />
+        </div>
+        <div class="field-group small">
+          <label for="tapY">Tap Y</label>
+          <input id="tapY" type="number" placeholder="240" />
+        </div>
+        <button id="tapBtn" disabled>Tap</button>
+        <div class="field-group small">
+          <label for="swipeFrom">Swipe From</label>
+          <input id="swipeFrom" type="text" placeholder="x1,y1" />
+        </div>
+        <div class="field-group small">
+          <label for="swipeTo">Swipe To</label>
+          <input id="swipeTo" type="text" placeholder="x2,y2" />
+        </div>
+        <button id="swipeBtn" disabled>Swipe</button>
+      </div>
+    </section>
+
+    <section class="panel file-manager-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Remote File Manager</h2>
+          <p>Browse device storage, download files, and upload content.</p>
+        </div>
+        <div class="file-manager-actions">
+          <input id="filePathInput" type="text" placeholder="/sdcard" />
+          <button id="browseFilesBtn">Browse</button>
+        </div>
+      </div>
+
+      <div class="file-manager-meta">
+        <span id="currentPathLabel">Path: /sdcard</span>
+        <span id="fileManagerStatus" class="small-status">Ready</span>
+      </div>
+
+      <div id="remoteFileList" class="remote-file-list">
+        <div class="device-row device-empty">No files loaded.</div>
+      </div>
+
+      <div class="upload-row">
+        <input id="uploadFileInput" type="file" />
+        <button id="uploadFileBtn">Upload file</button>
+      </div>
+    </section>
+
+    <section class="output-panel">
+      <h2>Status</h2>
+      <pre id="statusLog">Ready.</pre>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
