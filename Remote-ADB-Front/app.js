@@ -551,9 +551,17 @@ screenPreview.addEventListener('click', async (event) => {
   await sendShellCommand(`input tap ${x} ${y}`);
 });
 
+async function pollDevices() {
+  if (isConnected) return;
+  const devices = await checkBackend();
+  renderDeviceList(devices);
+  await maybeAutoConnect(devices);
+}
+
 autoConnectToggle.checked = autoConnectEnabled;
 filePathInput.value = currentRemotePath;
 enableScreenControls(false);
 showScreenPlaceholder();
 updateConnectionButtons();
 refreshDevices();
+setInterval(pollDevices, 5000);
