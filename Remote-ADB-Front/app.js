@@ -11,6 +11,7 @@ const installAdbBtn = document.getElementById("installAdbBtn");
 const installStatusLabel = document.getElementById("installStatus");
 const installBanner = document.getElementById("installBanner");
 const autoConnectToggle = document.getElementById("autoConnectToggle");
+const rememberRootToggle = document.getElementById("rememberRootToggle");
 const deviceList = document.getElementById("deviceList");
 const filePathInput = document.getElementById("filePathInput");
 const browseFilesBtn = document.getElementById("browseFilesBtn");
@@ -98,6 +99,54 @@ let autoConnectEnabled =
 let autoConnectDevices = new Set(
   JSON.parse(localStorage.getItem("adbAutoConnectDevices") || "[]"),
 );
+
+let sessionRootPassword = "";
+
+/**
+ * SessionVault handles AES-GCM encryption for sensitive session data.
+ * The key is generated in-memory and is never persisted to storage.
+ */
+const sessionVault = {
+  _key: null,
+  async _getKey() {
+    if (this._key) return this._key;
+    this._key = await window.crypto.subtle.generateKey(
+      { name: "AES-GCM", length: 256 },
+      true,
+      ["encrypt", "decrypt"]
+    );
+    return this._key;
+  },
+  async encrypt(text) {
+    const key = await this._getKey();
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(text);
+    const ciphertext = await window.crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, encoded);
+    return JSON.stringify({
+      iv: Array.from(iv),
+      data: Array.from(new Uint8Array(ciphertext))
+    });
+  },
+  async decrypt(blob) {
+    try {
+      const { iv, data } = JSON.parse(blob);
+      const key = await this._getKey();
+      const decrypted = await window.crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: new Uint8Array(iv) },
+        key,
+        new Uint8Array(data)
+      );
+      return new TextDecoder().decode(decrypted);
+    } catch (e) { return ""; }
+  }
+};
+
+let rfbViewer = null;
+
+let isJarvisListening = false;
+const recognition = window.SpeechRecognition || window.webkitSpeechRecognition 
+  ? new (window.SpeechRecognition || window.webkitSpeechRecognition)() 
+  : null;
 
 function appendStatus(message, type = "info") {
   const timestamp = new Date().toLocaleTimeString();
@@ -802,12 +851,139 @@ async function refreshScreen() {
   }
 }
 
+async function setRootPassword() {
+  const pwd = prompt("Enter the root/sudo password for this session:") || "";
+  sessionRootPassword = pwd;
+  
+  if (sessionRootPassword && rememberRootToggle && rememberRootToggle.checked) {
+    const encrypted = await sessionVault.encrypt(sessionRootPassword);
+    sessionStorage.setItem("adbSessionRootPassword", encrypted);
+  }
+}
+
+async function initVNC() {
+  const vncContainer = document.getElementById("vnc-screen");
+  if (!vncContainer || rfbViewer) return;
+
+  appendStatus("Initializing RDP/VNC Viewer...", "info");
+
+  try {
+    // Dynamically import noVNC from a CDN or local path
+    const { default: RFB } = await import("https://cdn.jsdelivr.net/npm/@novnc/novnc@1.3.0/core/rfb.js");
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    
+    // Example: Determine the port based on the current device.
+    // In a full implementation, the backend would provide this mapping.
+    const targetPort = 5900; 
+    const deviceIdParam = currentDeviceId ? `&deviceId=${encodeURIComponent(currentDeviceId)}` : "";
+    const url = `${protocol}//${window.location.host}/vnc-proxy?port=${targetPort}${deviceIdParam}`;
+
+    rfbViewer = new RFB(vncContainer, url, {
+      credentials: { password: "" } // Set VNC password if required
+    });
+
+    rfbViewer.addEventListener("connect", () => {
+      appendStatus("RDP/VNC Connected successfully.", "success");
+      rfbViewer.viewOnly = false;
+      rfbViewer.scaleViewport = true;
+    });
+
+    rfbViewer.addEventListener("disconnect", (e) => {
+      if (e.detail.clean) {
+        appendStatus("RDP/VNC Session ended.");
+      } else {
+        appendStatus("RDP/VNC Connection failed.", "error");
+      }
+      rfbViewer = null;
+    });
+
+    rfbViewer.addEventListener("credentialsrequired", () => {
+      const pwd = prompt("Please enter VNC password:");
+      rfbViewer.sendCredentials({ password: pwd });
+    });
+  } catch (err) {
+    appendStatus(`Failed to load noVNC: ${err.message}`, "error");
+  }
+}
+
+function initJarvis() {
+  if (!recognition) {
+    appendStatus("Voice commands (Jarvis) not supported in this browser.", "error");
+    return;
+  }
+
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = async (event) => {
+    const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+    appendStatus(`Jarvis heard: "${transcript}"`, "info");
+
+    if (transcript.includes("jarvis")) {
+      const command = transcript.replace("jarvis", "").trim();
+      if (command) {
+        await processAICommand(command);
+      } else {
+        appendStatus("Jarvis: At your service. What is your command?", "success");
+      }
+    }
+  };
+
+  recognition.onerror = (err) => {
+    console.error("Jarvis Speech Error:", err);
+    if (err.error !== 'no-speech') isJarvisListening = false;
+  };
+
+  recognition.onend = () => {
+    if (isJarvisListening) recognition.start(); // Keep listening
+  };
+}
+
+async function processAICommand(query) {
+  appendStatus(`Consulting Hexstrike-AI for: "${query}"...`);
+  try {
+    const response = await apiFetch("/api/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ prompt: query, context: { deviceId: currentDeviceId } })
+    });
+
+    appendStatus(`AI: ${response.reply}`, "success");
+    if (response.command) {
+      if (confirm(`Jarvis: Execute AI suggested command: "${response.command}"?`)) {
+        terminalOutput.textContent += `\n[AI Command] $ ${response.command}\n`;
+        const output = await sendShellCommand(response.command);
+        terminalOutput.textContent += (output || "Done.") + "\n";
+      }
+    }
+  } catch (error) {
+    appendStatus(`AI Processing failed: ${error.message}`, "error");
+  }
+}
+
+function toggleJarvis() {
+  if (!isJarvisListening) {
+    recognition.start();
+    isJarvisListening = true;
+    appendStatus("Jarvis voice system activated.", "success");
+  } else {
+    recognition.stop();
+    isJarvisListening = false;
+    appendStatus("Jarvis voice system deactivated.", "warn");
+  }
+}
+
 async function sendShellCommand(command) {
   appendStatus(`Running shell command: ${command}`);
+  if (command.startsWith("sudo ") && !sessionRootPassword) {
+    await setRootPassword();
+  }
+
   try {
     const response = await apiFetch("/shell", {
       method: "POST",
-      body: JSON.stringify({ deviceId: currentDeviceId || undefined, command }),
+      body: JSON.stringify({ deviceId: currentDeviceId || undefined, command, rootPassword: sessionRootPassword }),
     });
     return response.output;
   } catch (error) {
@@ -871,6 +1047,18 @@ autoConnectToggle.addEventListener("change", (event) => {
   autoConnectEnabled = event.target.checked;
   saveAutoConnectSettings();
 });
+
+if (rememberRootToggle) {
+  rememberRootToggle.checked = !!sessionRootPassword;
+  rememberRootToggle.addEventListener("change", async (event) => {
+    if (!event.target.checked) {
+      sessionStorage.removeItem("adbSessionRootPassword");
+    } else if (sessionRootPassword) {
+      const encrypted = await sessionVault.encrypt(sessionRootPassword);
+      sessionStorage.setItem("adbSessionRootPassword", encrypted);
+    }
+  });
+}
 
 deviceList.addEventListener("change", (event) => {
   if (!event.target.matches(".device-auto-checkbox")) return;
@@ -1009,7 +1197,13 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     document.getElementById(target).classList.add("active");
     btn.classList.add("active");
     if (target === "files") loadRemoteFiles();
+    if (target === "rdp") initVNC();
   });
+});
+
+// Jarvis Activation via Keyboard (Alt+J)
+window.addEventListener("keydown", (e) => {
+  if (e.altKey && e.key === 'j') toggleJarvis();
 });
 
 screenPreview.addEventListener("click", async (event) => {
@@ -1265,6 +1459,16 @@ filePathInput.value = currentRemotePath;
 enableScreenControls(false);
 showScreenPlaceholder();
 updateConnectionButtons();
+initJarvis();
+
+// Initialize the secure vault from storage
+(async () => {
+  const stored = sessionStorage.getItem("adbSessionRootPassword");
+  if (stored) {
+    sessionRootPassword = await sessionVault.decrypt(stored);
+    if (rememberRootToggle) rememberRootToggle.checked = !!sessionRootPassword;
+  }
+})();
 
 // Initial backend check, periodic polling, and update version badge
 pollDevices();
@@ -1274,3 +1478,38 @@ document.addEventListener("visibilitychange", () => {
 });
 checkForUpdates();
 loadTunnelStatus();
+
+if (vncEscBtn) {
+  vncEscBtn.addEventListener("click", () => {
+    if (rfbViewer) {
+      // Escape keysym is 0xff1b
+      rfbViewer.sendKey(0xff1b, "Escape", true);
+      rfbViewer.sendKey(0xff1b, "Escape", false);
+      appendStatus("Sent Escape key to VNC session.", "info");
+    }
+  });
+}
+
+if (vncCadBtn) {
+  vncCadBtn.addEventListener("click", () => {
+    if (rfbViewer) {
+      rfbViewer.sendCtrlAltDel();
+      appendStatus("Sent Ctrl+Alt+Del to VNC session.", "info");
+    }
+  });
+}
+
+if (vncFullBtn) {
+  vncFullBtn.addEventListener("click", () => {
+    const vncWrapper = document.querySelector(".vnc-wrapper");
+    if (!vncWrapper) return;
+
+    if (!document.fullscreenElement) {
+      vncWrapper.requestFullscreen().catch((err) => {
+        appendStatus(`Error attempting to enable full-screen mode: ${err.message}`, "error");
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  });
+}

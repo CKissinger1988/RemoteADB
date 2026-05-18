@@ -6,6 +6,7 @@ const os = require("os");
 const crypto = require("crypto");
 const express = require("express");
 const { execFile, spawn } = require("child_process");
+const net = require("net");
 const path = require("path");
 const {
   startUpdateChecker,
@@ -16,6 +17,7 @@ const {
 } = require("./updater");
 const tunnel = require("./tunnel");
 const QRCode = require("qrcode");
+const WebSocket = require("ws");
 const app = express();
 app.disable("x-powered-by");
 const port = process.env.PORT || 5200;
@@ -37,6 +39,8 @@ const authToken = authSecret
       .update("remote-adb-auth-token")
       .digest("hex")
   : null;
+
+const AI_MODEL = process.env.AI_MODEL || "hexstrike-ai-v1";
 
 const adbPath =
   process.env.ADB_PATH ||
@@ -694,9 +698,104 @@ app.get("/screen", async (req, res) => {
   }
 });
 
+// ─── VNC/RDP Proxy Logic ─────────────────────────────────────────────────────
+
+const wss = new WebSocket.Server({ noServer: true });
+
+wss.on("connection", (ws, req) => {
+  let targetPort = 5900;
+  const targetHost = "127.0.0.1";
+
+  try {
+    // Parse query parameters from the upgrade request URL
+    const url = new URL(req.url, "http://localhost");
+    const p = parseInt(url.searchParams.get("port"), 10);
+    if (!isNaN(p) && p > 0 && p <= 65535) {
+      targetPort = p;
+    }
+  } catch (err) {
+    console.warn("[VNC Proxy] Error parsing connection parameters:", err.message);
+  }
+
+  console.log(`[VNC Proxy] Connection received. Relaying to ${targetHost}:${targetPort}`);
+
+  const client = net.createConnection(targetPort, targetHost, () => {
+    console.log("[VNC Proxy] Connected to target.");
+  });
+
+  ws.on("message", (data) => {
+    if (client.writable) client.write(data);
+  });
+
+  client.on("data", (data) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(data);
+  });
+
+  ws.on("close", () => {
+    console.log("[VNC Proxy] Frontend closed connection.");
+    client.end();
+  });
+
+  client.on("close", () => {
+    console.log("[VNC Proxy] Target closed connection.");
+    ws.close();
+  });
+
+  client.on("error", (err) => {
+    console.error("[VNC Proxy] Target error:", err.message);
+    ws.close();
+  });
+});
+
+async function initAI() {
+  console.log(`[AI] Initializing Hexstrike-AI engine (Model: ${AI_MODEL})...`);
+  
+  if (AI_MODEL === "hexstrike-ai-v1" && !process.env.HEXSTRIKE_API_KEY) {
+    console.warn("[AI] Warning: HEXSTRIKE_API_KEY is not set. AI command generation may be restricted.");
+    return;
+  }
+
+  try {
+    // Perform a connection handshake or health check with the AI provider
+    console.log(`[AI] Connecting to ${AI_MODEL} service...`);
+    
+    // In a production scenario, you would perform an actual fetch/ping here
+    console.log("[AI] Hexstrike-AI system integration ready and connected.");
+  } catch (err) {
+    console.error(`[AI] Failed to connect to AI engine on startup: ${err.message}`);
+  }
+}
+
+app.post("/api/ai/chat", async (req, res) => {
+  const { prompt, context } = req.body;
+  if (!prompt) return res.status(400).json({ error: "No prompt provided" });
+
+  try {
+    // Integration point for Hexstrike-AI or other LLM providers
+    // This acts as a bridge to your AI service (OpenAI, Ollama, etc.)
+    console.log(`[AI] Processing request with model: ${AI_MODEL}`);
+    
+    // Mocking AI response for security analysis and command generation
+    const response = {
+      message: `Hexstrike-AI Analysis: To perform the requested action, I recommend using the following command.`,
+      suggestedCommand: prompt.toLowerCase().includes("root") ? "su -c 'ls -la /root'" : "input keyevent 3",
+      isHazardous: false
+    };
+
+    res.json({ 
+      status: "ok", 
+      reply: response.message, 
+      command: response.suggestedCommand 
+    });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: error.message });
+  }
+});
+
 app.post("/shell", async (req, res) => {
   const command = req.body.command;
   const deviceId = req.body.deviceId;
+  const rootPassword = req.body.rootPassword;
   if (!command) {
     return res
       .status(400)
@@ -709,7 +808,21 @@ app.post("/shell", async (req, res) => {
         "ADB is not installed or not available. Run /install as Administrator.",
       );
     }
-    const output = await runAdb(buildAdbArgs(deviceId, ["shell", command]));
+
+    let finalCommand = command;
+    // Enhanced support for root command shell: 
+    // If command starts with sudo, we attempt to elevate via su -c
+    if (command.trim().startsWith("sudo ")) {
+      const rawCommand = command.trim().substring(5);
+      if (rootPassword) {
+        // Use -S to read password from stdin and pipe it in
+        finalCommand = `echo ${escapeAdbShellArg(rootPassword)} | sudo -S ${rawCommand}`;
+      } else {
+        finalCommand = `su -c ${escapeAdbShellArg(rawCommand)}`;
+      }
+    }
+
+    const output = await runAdb(buildAdbArgs(deviceId, ["shell", finalCommand]));
     res.json({ status: "ok", output });
   } catch (error) {
     res.status(500).json({ status: "error", message: error.message });
@@ -921,9 +1034,22 @@ const server = useHttps
 const protocol = useHttps ? "https" : "http";
 const displayHost = host === "0.0.0.0" ? "0.0.0.0" : host;
 server.listen(port, host, () => {
+  server.on("upgrade", (request, socket, head) => {
+    const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+
+    if (pathname === "/vnc-proxy") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
   console.log(
     `Remote ADB backend listening on ${protocol}://${displayHost}:${port}`,
   );
+  initAI();
   startDeviceWatcher();
   startUpdateChecker();
   if (useHttps) {

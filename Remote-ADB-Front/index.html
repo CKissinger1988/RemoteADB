@@ -20,6 +20,7 @@
     <nav class="tab-nav" role="tablist" aria-label="Main navigation">
       <button class="tab-btn active" data-tab="dashboard" role="tab" aria-selected="true" aria-controls="dashboard">Dashboard</button>
       <button class="tab-btn" data-tab="files" role="tab" aria-selected="false" aria-controls="files">File Manager</button>
+      <button class="tab-btn" data-tab="rdp" role="tab" aria-selected="false" aria-controls="rdp">RDP Viewer</button>
       <button class="tab-btn" data-tab="media" role="tab" aria-selected="false" aria-controls="media">Media & Camera</button>
       <button class="tab-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="settings">Settings</button>
       <div class="status-indicators">
@@ -107,6 +108,24 @@
         </section>
       </div>
 
+      <!-- RDP Tab -->
+      <div id="rdp" class="tab-pane" role="tabpanel" aria-labelledby="rdp">
+        <section class="panel rdp-panel">
+          <div class="panel-header">
+            <h2>Remote Desktop (VNC)</h2>
+            <p class="small-status">Connects to 127.0.0.1:5900 via the internal proxy.</p>
+          </div>
+          <div class="vnc-wrapper">
+            <div id="vnc-screen" class="vnc-container"></div>
+            <div class="vnc-floating-actions">
+              <button id="vncEscBtn" class="btn-fab" title="Send Escape">Esc</button>
+              <button id="vncCadBtn" class="btn-fab" title="Send Ctrl+Alt+Del">CAD</button>
+              <button id="vncFullBtn" class="btn-fab" title="Toggle Fullscreen">⛶</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
       <!-- Media Tab -->
       <div id="media" class="tab-pane" role="tabpanel" aria-labelledby="media">
         <section class="panel">
@@ -136,6 +155,11 @@
           <div class="setting-row">
             <label class="toggle-wrap">
               <input id="autoConnectToggle" type="checkbox" /> Auto-connect on startup
+            </label>
+          </div>
+          <div class="setting-row">
+            <label class="toggle-wrap">
+              <input id="rememberRootToggle" type="checkbox" /> Remember Root Password (this session)
             </label>
           </div>
           <hr />
